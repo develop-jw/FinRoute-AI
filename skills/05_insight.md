@@ -76,3 +76,32 @@ AI는 독립된 데이터 조각들을 연결하여 하나의 일관된 스토�
 - **Action**: "저점 분할 매수 시작"
 - **Why now?**: "[추세 파악] 장기 추세(MA)는 우상향을 유지하는 가운데, 단기 지표(RSI)가 과매도 구간에 진입하여 기술적 반등 확률이 매우 높은 '눌림목' 구간입니다."
 - **Signal**: "BUY" (Confidence: 82%)
+
+---
+
+## 5-6. 하이브리드 로직 (API 키 부재 시 대체 로직)
+
+`ANTHROPIC_API_KEY`가 설정되지 않았거나 연동에 실패한 경우, 시스템은 **'퀀트 룰 엔진(Quant Rule Engine)'** 모드로 자동 전환하여 정해진 규칙에 따라 인사이트를 도출한다.
+
+### ① 룰 기반 신호 결정 (Decision Matrix)
+
+| 클래스/조건 | 감지 지표 | 임계치 (Threshold) | 출력 시그널 (Signal) |
+|:---|:---|:---|:---|
+| **TimeSeries** | RSI | < 30 (과매도) | **BUY** |
+| **TimeSeries** | RSI | > 70 (과매수) | **REDUCE** |
+| **TimeSeries** | MA Trend | MA20 < MA60 (데드크로스) | **REDUCE** |
+| **TimeSeries** | MA Trend | MA20 > MA60 (골든크로스) | **BUY / HOLD** |
+| **Static** | HHI | > 2,500 | **REDUCE (Rebalance)** |
+| **Static** | Weight Dev | 목표 대비 ±5%p 초과 | **REDUCE (Rebalance)** |
+
+### ② 룰 기반 텍스트 생성 (Deterministic Action)
+
+API 키가 없을 경우, 아래와 같이 정형화된 문구를 조합하여 `action`과 `why_now`를 생성한다.
+
+- **Action Template**: "[시그널] 전략을 권고합니다. 지표 임계치 이탈에 따른 대응이 필요합니다."
+- **Why Now Template**: "[정량 분석] 현재 [지표명]이 [현재값]을 기록하며 기술적 [과매수/과매도/추세] 구간에 진입했습니다."
+
+### ③ 하이브리드 운영 원칙
+- **API 키 존재 시**: 룰 엔진의 결과를 LLM의 '참고 데이터'로 전달하여 더 풍부한 인사이트를 생성한다.
+- **API 키 부재 시**: 룰 엔진의 결과(Signal, Action, Why now)를 그대로 화면에 출력하여 서비스 연속성을 보장한다.
+- **Confidence 점수**: 룰 엔진 단독 구동 시에는 신뢰도를 일괄적으로 **'70'**으로 고정하여 표시한다.
