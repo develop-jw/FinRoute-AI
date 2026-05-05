@@ -1,0 +1,18 @@
+# API Keys and Environment Variables
+.env
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data files (Sensitive/Personal)
+data/portfolio_snapshot.csv
+
+# Local OS files
+.DS_Store
+Thumbs.db
+
+# IDE settings
+.vscode/
+.idea/
