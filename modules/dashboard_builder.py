@@ -783,7 +783,7 @@ def _kpi_defs(
             ("HHI", fmt_num(ir.get("HHI"), 0), "집중도"),
             ("유효 자산 수", fmt_num(ir.get("eff_n"), 1), "분산도"),
             ("Top-3 집중도", fmt_pct(ir.get("top3_conc")), "상위 쏠림"),
-            ("누적 수익률", fmt_pct(ir.get("cum_return")), "스냅샷"),
+            ("누적 수익률", fmt_pct(ir.get("cum_return")), "Static 지표"),
             ("최대 리스크 기여", ir.get("max_risk_asset") or "—", "자산명"),
         ]
     else:
@@ -1383,7 +1383,7 @@ Result: <b>{classify_result["class_type"]}</b> / <b>{classify_result["dimension"
 
             vec_groups = [
                 ("1. TimeSeries (시계열)", ["Date","Open","High","Low","Close","Volume"], v[0:6]),
-                ("2. Static (스냅샷)", ["Asset(Name)","Weight","Target","Value","Return","Quarter(Date)"], v[6:12]),
+                ("2. Static (자산 구조)", ["Asset(Name)","Weight","Target","Value","Return","Quarter(Date)"], v[6:12]),
                 ("3. Activity (매매)", ["Timestamp","Buy/Sell","Quantity","Price","Fee","Ticker"], v[12:18]),
             ]
 
@@ -1477,12 +1477,10 @@ Result: <b>{classify_result["class_type"]}</b> / <b>{classify_result["dimension"
                     st.plotly_chart(_fig_rsi(df), use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
-            # Action Console
+            # Action Console - 세로 배치 (지금 할 행동, Why now?)
             blocks = [
-                ("Action",       insight_result.get("action", "")),
-                ("Why Now?",     insight_result.get("why_now", "")),
-                ("Rebalancing",  insight_result.get("rebalancing", "")),
-                ("Hedge",        insight_result.get("hedge", "")),
+                ("지금 할 행동", insight_result.get("action", "")),
+                ("Why now?", insight_result.get("why_now", "")),
             ]
             blocks_html = "".join([
                 f'<div class="sq-ac-block">'
@@ -1498,7 +1496,7 @@ Result: <b>{classify_result["class_type"]}</b> / <b>{classify_result["dimension"
                 '<span class="sq-ac-badge">AI Insight</span>'
                 '</div>'
                 f'<div class="sq-ac-llm">{html.escape(str(insight_result.get("llm_input","")))}</div>'
-                f'<div class="sq-ac-body">{blocks_html}</div>'
+                f'<div class="sq-ac-body" style="grid-template-columns: 1fr;">{blocks_html}</div>'
                 '</div>',
                 unsafe_allow_html=True,
             )

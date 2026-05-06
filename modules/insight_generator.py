@@ -62,7 +62,7 @@ def _heuristic(
         if indicator_result.get("MDD") is not None:
             parts.append(f"MDD {indicator_result['MDD']*100:.1f}%")
     elif ct == "Static":
-        parts.append("[구성 파악] 자산 비중·기여도 기준 스냅샷")
+        parts.append("[구성 파악] 자산 구조(Static) 및 기여도 분석")
         if indicator_result.get("active_share") is not None:
             parts.append(
                 f"[항목 비교] 액티브 셰어 {indicator_result['active_share']*100:.1f}%"
