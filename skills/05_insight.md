@@ -42,8 +42,6 @@ AI는 독립된 데이터 조각들을 연결하여 하나의 일관된 스토�
 | `regime` | str | 현재 시장 리스크 국면 | `"RISK-ON"`, `"RISK-OFF"` |
 | `action` | str | **지금 즉시 할 행동** (핵심) | `"보유 비중 유지 및 추격 매수 금지"` |
 | `why_now` | str | **판단 근거 (태그 포함)** | `"[추세 파악] MA20 골든크로스와 RSI 저평가..."` |
-| `rebalancing` | str | 리밸런싱 구체적 제안 | `"자산 A의 비중을 5%p 축소하여 현금 확보"` |
-| `hedge` | str | 리스크 방어 전략 | `"인버스 ETF 10% 편입으로 하방 리스크 제한"` |
 | `llm_input` | str | AI에게 입력된 핵심 요약 | `"[TimeSeries 1D] RSI 25, Golden Cross 감지..."` |
 
 ---

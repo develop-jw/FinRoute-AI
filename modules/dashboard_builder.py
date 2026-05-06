@@ -1436,12 +1436,10 @@ Result: <b>{classify_result["class_type"]}</b> / <b>{classify_result["dimension"
                 st.plotly_chart(_fig_rsi(df), use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # Action Console - 하나의 큰 박스, 폰트 크고 굵게
+        # Action Console - 세로 배치 (지금 할 행동, Why now?)
         blocks = [
-            ("Action",       insight_result.get("action", "")),
-            ("Why Now?",     insight_result.get("why_now", "")),
-            ("Rebalancing",  insight_result.get("rebalancing", "")),
-            ("Hedge",        insight_result.get("hedge", "")),
+            ("지금 할 행동", insight_result.get("action", "")),
+            ("Why now?", insight_result.get("why_now", "")),
         ]
         blocks_html = "".join([
             f'<div class="sq-ac-block">'
@@ -1457,7 +1455,7 @@ Result: <b>{classify_result["class_type"]}</b> / <b>{classify_result["dimension"
             '<span class="sq-ac-badge">AI Insight</span>'
             '</div>'
             f'<div class="sq-ac-llm">{html.escape(str(insight_result.get("llm_input","")))}</div>'
-            f'<div class="sq-ac-body">{blocks_html}</div>'
+            f'<div class="sq-ac-body" style="grid-template-columns: 1fr;">{blocks_html}</div>'
             '</div>',
             unsafe_allow_html=True,
         )

@@ -114,7 +114,9 @@ def _anthropic_generate(
         client = anthropic.Anthropic(api_key=key)
         sys = (
             "당신은 15년 경력의 퀀트 애널리스트입니다. 한국어로 간결하게 답합니다. "
-            "Why now는 반드시 [태그]로 시작합니다."
+            "Why now는 반드시 [태그]로 시작합니다. "
+            "rebalancing과 hedge 제안은 별도 항목으로 나누지 말고, "
+            "가장 핵심적인 내용을 action 항목에 자연스럽게 통합하여 하나의 완성된 문장으로 작성하십시오."
         )
         user = (
             f"classify: {classify_result}\nmetrics: {indicator_result}\n"
