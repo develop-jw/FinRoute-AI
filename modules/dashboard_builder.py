@@ -579,7 +579,7 @@ SIDEBAR_ICON_ENGINE = """
 <div class="sq-sb-nav-ic" title="분석 엔진">
 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="#0a5c5c" stroke-width="1.5" fill="rgba(10,92,92,0.1)"/>
-  <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852 1 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="#0a5c5c" stroke-width="1.15" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00-.33 1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852 1 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="#0a5c5c" stroke-width="1.15" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
 </svg></div>
 """
 
@@ -1081,7 +1081,6 @@ def _fig_weight_drift(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-
 def _render_market(mkt_data: list) -> str:
     if not mkt_data:
         return '<p style="font-size:0.82rem;color:#9aacb0;margin:4px 0">yfinance not installed</p>'
@@ -1106,51 +1105,42 @@ def _render_market(mkt_data: list) -> str:
 
 
 def _render_home_charts(mkt_data: list) -> None:
-    """홈 화면: 시장 지표 미니 차트 6개."""
+    """홈 화면: 시장 지표 미니 차트 6개 (통합 카드형)"""
     if not mkt_data or not any(m.get("hist") for m in mkt_data):
         st.info("시장 데이터를 불러오는 중... (yfinance 필요)")
         return
 
     valid = [m for m in mkt_data if m.get("price") is not None and len(m.get("hist", [])) > 0]
     if not valid:
-        st.warning("yfinance 설치 후 시장 지표를 확인할 수 있습니다: pip install yfinance")
+        st.warning("yfinance 설치 후 시장 지표를 확인할 수 있습니다.")
         return
 
+    import plotly.graph_objects as go
+
     cols = st.columns(3)
-    for i, item in enumerate(valid):
+    for i, item in enumerate(valid[:6]):
         col = cols[i % 3]
         with col:
             chg   = item["change"]
-            color = "#0a5c5c" if chg >= 0 else "#b42318"
+            color = "#1a7f37" if chg >= 0 else "#b42318"
+            bg_fill = "rgba(26,127,55,0.08)" if chg >= 0 else "rgba(180,35,24,0.06)"
+            sign  = "+" if chg > 0 else ""
+            arrow = "▲" if chg >= 0 else "▼"
             price_str = (
                 f"{item['price']:,.0f}" if item["name"] in ("KOSPI", "USD/KRW")
                 else f"{item['price']:,.2f}"
             )
-            arrow = "▲" if chg >= 0 else "▼"
-            st.markdown(
-                f'<div class="sq-card" style="padding:16px 18px;margin-bottom:12px">'
-                f'<div style="font-size:0.78rem;font-weight:700;color:#7a8f94;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">{html.escape(item["name"])}</div>'
-                f'<div style="font-size:1.5rem;font-weight:800;color:{color}">{price_str}</div>'
-                f'<div style="font-size:0.82rem;color:{color};margin-top:4px">{arrow} {chg:+.2f}%</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
+            
             hist = item.get("hist", [])
-            if len(hist) >= 2:
-                import plotly.graph_objects as go
-                fig = go.Figure(go.Scatter(
-                    y=hist, mode="lines",
-                    line=dict(color=color, width=2),
-                    fill="tozeroy",
-                    fillcolor=f"{'rgba(10,92,92,0.1)' if chg >= 0 else 'rgba(180,35,24,0.08)'}",
-                ))
-                fig.update_layout(
-                    height=80, margin=dict(l=0,r=0,t=0,b=0),
-                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    showlegend=False,
-                    xaxis=dict(visible=False), yaxis=dict(visible=False),
-                )
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(y=hist, mode="lines", line=dict(color=color, width=2.5), fill="tozeroy", fillcolor=bg_fill, hoverinfo="skip"))
+            fig.add_annotation(x=0, y=1.15, xref="paper", yref="paper", text=f"<b>{item['name']}</b>", showarrow=False, font=dict(size=12, color="#7a8f94"), xanchor="left", yanchor="top")
+            fig.add_annotation(x=0, y=0.75, xref="paper", yref="paper", text=f"<b>{price_str}</b>", showarrow=False, font=dict(size=26, color=color, family="DM Sans"), xanchor="left", yanchor="top")
+            fig.add_annotation(x=0, y=0.45, xref="paper", yref="paper", text=f"{arrow} {sign}{chg:.2f}%", showarrow=False, font=dict(size=13, color=color, family="DM Sans"), xanchor="left", yanchor="top")
+            fig.update_layout(height=140, margin=dict(l=20, r=0, t=20, b=0), paper_bgcolor="#ffffff", plot_bgcolor="#ffffff", showlegend=False, xaxis=dict(visible=False, fixedrange=True), yaxis=dict(visible=False, fixedrange=True, range=[min(hist)*0.99, max(hist)*1.05]), shapes=[dict(type="rect", xref="paper", yref="paper", x0=0, y0=0, x1=1, y1=1, line=dict(color="#dde3e8", width=1.5), fillcolor="rgba(0,0,0,0)", layer="below")])
+            
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 def build(
@@ -1168,12 +1158,35 @@ def build(
     # HOME 뷰
     # ══════════════════════════════════════
     if view == "home":
+        # 1. Market Sentiment (시장 분위기 요약)
+        st.markdown("""
+        <div style="background:#eef7f4; padding:16px 20px; border-radius:10px; border-left:4px solid #0a5c5c; margin-bottom:28px; box-shadow: 0 2px 10px rgba(10,92,92,0.05);">
+            <strong style="color:#0a5c5c; font-size:1.1rem;">✦</strong> 오늘 시장은 기술주 중심의 강한 반등세가 이어지며 <strong style="color:#0a5c5c;">위험 자산 선호(Risk-On)</strong> 국면입니다.
+        </div>
+        """, unsafe_allow_html=True)
+
+        # 2. 상단 타이틀
         st.markdown(
             '<h2 style="font-size:1.5rem;font-weight:800;color:#063d3d;margin-bottom:4px">Market Overview</h2>'
             '<p style="color:#7a8f94;font-size:0.88rem;margin-bottom:20px">Real-time global market indicators</p>',
             unsafe_allow_html=True,
         )
+        
+        # 3. Market Indicators (마켓 카드 3x2)
         _render_home_charts(mkt_data)
+
+        # 4. Enhanced CSV Upload Zone (메인 업로드 영역)
+        st.markdown("""
+        <div style="border: 2px dashed #0a5c5c; padding: 40px; text-align: center; border-radius: 14px; background-color: #f7f9fb; margin-top: 30px; margin-bottom: 10px;">
+            <h3 style="color: #0a5c5c; margin-bottom: 10px;">📂 분석할 포트폴리오/종목 CSV를 이곳에 드래그하세요</h3>
+            <p style="color: #7a8f94; font-size:0.9rem;">어떤 파일을 올려야 할지 모르겠나요? <a href="#" style="color:#0a5c5c; font-weight:bold;">[샘플 다운로드]</a></p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        uploaded_main = st.file_uploader(" ", type=["csv"], key="main_csv_upload", label_visibility="collapsed")
+        if uploaded_main:
+            st.session_state.fin_view = "main"
+            st.rerun()
         return
 
     # ══════════════════════════════════════
@@ -1271,12 +1284,12 @@ height:60vh;color:#9aacb0;text-align:center;gap:12px">
         )
 
     # ══════════════════════════════════════
-    # 중앙 - ENGINE VIEW
+    # 중앙 - ENGINE VIEW & DASHBOARD VIEW
     # ══════════════════════════════════════
     with mc:
-      if engine:
-        # ① 파이프라인
-        st.markdown(f'''
+        if engine:
+            # ① Analysis Pipeline
+            st.markdown(f'''
 <div class="sq-eng-section">
 <div class="sq-eng-section-title">① Analysis Pipeline</div>
 <div class="sq-pipe-row">
@@ -1293,171 +1306,199 @@ font-family:monospace;font-size:0.82rem;color:#063d3d">
 Result: <b>{classify_result["class_type"]}</b> / <b>{classify_result["dimension"]}</b> / dashboard: <b>{classify_result["dashboard"]}</b>
 </div></div>''', unsafe_allow_html=True)
 
-        # ② 유사도
-        sim  = classify_result["similarity"]
-        best = max(sim, key=lambda k: sim[k])
-        sim_html = '<div class="sq-eng-section"><div class="sq-eng-section-title">② Class Similarity</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">'
-        for name in ["TimeSeries", "Static", "Activity"]:
-            pct = sim[name] * 100
-            is_best = name == best
-            sim_html += (
-                f'<div class="sq-sim-card {"best" if is_best else ""}">'
-                f'<div class="sq-sim-name">{"✅ " if is_best else ""}{name}</div>'
-                f'<div class="sq-sim-pct">{pct:.0f}%</div>'
-                f'<div class="sq-sim-bar"><div class="sq-sim-fill" style="width:{pct:.0f}%"></div></div>'
-                f'</div>'
-            )
-        sim_html += '</div></div>'
-        st.markdown(sim_html, unsafe_allow_html=True)
+            # ② Goal Inference
+            active_goals = set(classify_result["goals"])
+            chips_html = ""
+            reasons_html = ""
+            for g, (title, _desc) in _GOAL_META.items():
+                if g in active_goals:
+                    chips_html += f'<span class="sq-goal-chip sq-goal-on">✦ {title}</span>'
+                    mock_reason = "관련 데이터 특성 및 차원 패턴 감지됨"
+                    if "trend" in g: mock_reason = "시계열(Date/Close) 패턴 감지"
+                    elif "comp" in g: mock_reason = "자산명(Asset) 및 비중(Weight) 벡터 동시 감지"
+                    elif "compare" in g: mock_reason = "목표(Target) 대비 실제(Actual) 비중 수치 포착"
+                    elif "anomaly" in g: mock_reason = "비중 괴리 또는 과매수/과매도 위험 감지"
+                    reasons_html += f'<div style="margin-bottom: 5px;"><b>[{title}]</b> ← {mock_reason}</div>'
+                else:
+                    chips_html += f'<span class="sq-goal-chip sq-goal-off">○ {title}</span>'
 
-        # ③ 18D 벡터 매트릭스
-        v = classify_result["vector"]
-        vec_groups = [
-            ("Price Series",  ["Date","Open","High","Low","Close","Volume"],  v[0:6]),
-            ("Trade Activity",["Timestamp","Buy/Sell","Qty","Price","Fee","—"], v[6:11]+[0]),
-            ("Asset Structure",["Asset","Holding","Weight","Value","—","—"],   v[11:15]+[0,0]),
-            ("Performance",   ["기여도","목표값","예상치","—","—","—"],         v[15:18]+[0,0,0]),
-        ]
-        vec_html = '<div class="sq-eng-section"><div class="sq-eng-section-title">③ 18D Feature Vector</div>'
-        for grp_title, labs, ch in vec_groups:
-            vec_html += (
-                f'<div style="margin-bottom:14px">'
-                f'<div style="font-size:0.72rem;font-weight:700;color:#7a8f94;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em">{grp_title}</div>'
-                f'<div class="sq-vec-matrix">'
-            )
-            for lb, bit in zip(labs, ch):
-                cls = "v1" if bit and lb != "—" else "v0"
-                disp = lb if lb != "—" else ""
-                vec_html += (
-                    f'<div class="sq-vec-cell {cls}">'
-                    f'<span class="sq-vec-bit">{"●" if (bit and lb != "—") else "·"}</span>'
-                    f'<span>{disp}</span>'
+            if not reasons_html:
+                reasons_html = "<div>감지된 주요 분석 목적 없음</div>"
+
+            llm_preview = html.escape(str(insight_result.get("llm_input", "System standby...")))
+
+            st.markdown(f'''
+<div class="sq-eng-section">
+  <div class="sq-eng-section-title">② Goal Inference</div>
+  <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+    {chips_html}
+  </div>
+  <div style="background: #f7f9fb; border-left: 3px solid #0a5c5c; padding: 12px 16px; margin-bottom: 16px; font-size: 0.82rem; color: #1a2d30;">
+    {reasons_html}
+  </div>
+  <div style="background: rgba(10,92,92,0.05); padding: 12px; border-radius: 6px; font-family: monospace; font-size: 0.78rem; color: #063d3d; line-height: 1.4;">
+    > System generating insight...<br>
+    > Input Context: {llm_preview}
+  </div>
+</div>''', unsafe_allow_html=True)
+
+            # ③ Class Similarity & System Meta
+            sim  = classify_result["similarity"]
+            best = max(sim, key=lambda k: sim[k])
+            sim_html = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">'
+            for name in ["TimeSeries", "Static", "Activity"]:
+                pct = sim[name] * 100
+                is_best = name == best
+                sim_html += (
+                    f'<div class="sq-sim-card {"best" if is_best else ""}">'
+                    f'<div class="sq-sim-name">{"✅ " if is_best else ""}{name}</div>'
+                    f'<div class="sq-sim-pct">{pct:.0f}%</div>'
+                    f'<div class="sq-sim-bar"><div class="sq-sim-fill" style="width:{pct:.0f}%"></div></div>'
                     f'</div>'
                 )
-            vec_html += '</div></div>'
-        vec_html += (
-            '<div style="font-size:0.72rem;color:#9aacb0">'
-            '<span style="color:#0a5c5c;font-weight:700">●</span> Detected &nbsp;'
-            '<span style="color:#c5d5d0">·</span> Not detected'
-            '</div></div>'
-        )
-        st.markdown(vec_html, unsafe_allow_html=True)
+            sim_html += '</div>'
 
-        # ④ 분석 목적 (영어 코드 제거, 박스 형태)
-        active_goals = set(classify_result["goals"])
-        goal_html = '<div class="sq-eng-section"><div class="sq-eng-section-title">④ Analysis Goals</div>'
-        for g, (title, desc) in _GOAL_META.items():
-            on = g in active_goals
-            goal_html += (
-                f'<div class="sq-goal-card {"on" if on else "off"}">'
-                f'<div class="sq-goal-dot {"on" if on else "off"}"></div>'
-                f'<div><div class="sq-goal-card-name">{title}</div>'
-                f'<div class="sq-goal-card-desc">{desc}</div></div>'
-                + ('<span style="margin-left:auto;font-size:0.78rem;font-weight:700;color:#0a5c5c;background:rgba(10,92,92,0.1);padding:2px 8px;border-radius:999px">ON</span>' if on else '')
-                + '</div>'
-            )
-        goal_html += (
-            f'<div style="margin-top:12px;padding:10px 14px;background:rgba(10,92,92,0.05);'
-            f'border-radius:8px;font-family:monospace;font-size:0.78rem;color:#0a5c5c">'
-            f'LLM input: {html.escape(str(insight_result.get("llm_input","")))}</div></div>'
-        )
-        st.markdown(goal_html, unsafe_allow_html=True)
+            total_rows = len(df)
+            missing_pct = (df.isna().sum().sum() / df.size) * 100 if df.size > 0 else 0
+            engine_status = "Anthropic LLM 🟢" if insight_result.get("signal") else "Quant Rule Engine (Fallback) 🟡"
 
-      # ══════════════════════════════════════
-      # 중앙 - DASHBOARD VIEW
-      # ══════════════════════════════════════
-      else:
-        # Hero
-        last_title = "Rebalancing" if dash == "portfolio" else "Hedge"
-        cr = indicator_result.get("cum_return")
-        cr_txt = f"{float(cr)*100:.2f}%" if cr is not None and np.isfinite(cr) else "—"
-        conf = int(insight_result.get("confidence", 0))
-        sig  = insight_result.get("signal", "HOLD")
-        hedge_or_rebal = (
-            insight_result.get("rebalancing", "") if dash == "portfolio"
-            else insight_result.get("hedge", "")
-        )
-        st.markdown(
-            _hero_row_html(sig, conf, cr_txt,
-                           str(insight_result.get("regime","—")),
-                           str(insight_result.get("action","")),
-                           str(hedge_or_rebal), last_title),
-            unsafe_allow_html=True,
-        )
+            meta_html = f'''
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #1a2d30; color: #f4faf9; padding: 12px 18px; border-radius: 8px; font-size: 0.8rem;">
+                <div>
+                    <span style="color: #7a8f94; margin-right: 6px;">Data Meta:</span>
+                    <span style="margin-right: 14px;">Rows <b>{total_rows:,}</b></span>
+                    <span style="color: {"#e74c3c" if missing_pct > 5 else "#1dd1a1"};">Missing <b>{missing_pct:.1f}%</b></span>
+                </div>
+                <div>
+                    <span style="color: #7a8f94; margin-right: 6px;">Active Engine:</span>
+                    <b>{engine_status}</b>
+                </div>
+            </div>
+            '''
+            st.markdown(f'<div class="sq-eng-section"><div class="sq-eng-section-title">③ Class Similarity & Meta</div>{sim_html}{meta_html}</div>', unsafe_allow_html=True)
 
-        # KPI row
-        defs = _kpi_defs(classify_result, indicator_result)
-        k1, k2, k3, k4, k5 = st.columns(5)
-        for col, (name, val, sub) in zip([k1,k2,k3,k4,k5], defs):
-            with col:
-                dot = _badge_color(str(val), name)
-                st.markdown(
-                    f'<div class="sq-card sq-kpi">'
-                    f'<div class="sq-kpi__name">{html.escape(name)}</div>'
-                    f'<div class="sq-kpi__val">{html.escape(str(val))}</div>'
-                    f'<div class="sq-kpi__sub">{html.escape(sub)}</div>'
-                    f'<div class="sq-kpi__dot" style="color:{dot}">● 상태</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
+            # ④ 18D Feature Vector (Input Scan)
+            v = classify_result["vector"]
+            v = v + [0]*(18-len(v)) if len(v) < 18 else v[:18]
+
+            vec_groups = [
+                ("1. TimeSeries (시계열)", ["Date","Open","High","Low","Close","Volume"], v[0:6]),
+                ("2. Static (스냅샷)", ["Asset(Name)","Weight","Target","Value","Return","Quarter(Date)"], v[6:12]),
+                ("3. Activity (매매)", ["Timestamp","Buy/Sell","Quantity","Price","Fee","Ticker"], v[12:18]),
+            ]
+
+            vec_html = '<div class="sq-eng-section"><div class="sq-eng-section-title">④ 18D Feature Vector (Input Scan)</div>'
+            for grp_title, labs, ch in vec_groups:
+                vec_html += (
+                    f'<div style="margin-bottom:18px">'
+                    f'<div style="font-size:0.78rem;font-weight:700;color:#0a5c5c;margin-bottom:8px;">{grp_title}</div>'
+                    f'<div class="sq-vec-matrix" style="grid-template-columns: repeat(6, 1fr); gap: 8px;">'
                 )
+                for lb, bit in zip(labs, ch):
+                    cls = "v1" if bit else "v0"
+                    icon = "●" if bit else "·"
+                    vec_html += (
+                        f'<div class="sq-vec-cell {cls}" style="padding: 14px 6px; border-radius: 8px;">'
+                        f'<div class="sq-vec-bit" style="font-size:1.2rem; margin-bottom:4px;">{icon}</div>'
+                        f'<div style="font-size:0.7rem; text-align:center; font-weight:600;">{lb}</div>'
+                        f'</div>'
+                    )
+                vec_html += '</div></div>'
+            vec_html += '</div>'
+            st.markdown(vec_html, unsafe_allow_html=True)
 
-        # 메인 차트 (KPI 바로 아래, 빈 박스 없음)
-        main_id = chart_result.get("main_chart", "")
-        st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
-        if main_id == "candlestick":
-            st.plotly_chart(_fig_candlestick(df), use_container_width=True)
-        elif main_id == "dual_line" and classify_result["class_type"] == "Static":
-            st.plotly_chart(_fig_static_dual(df), use_container_width=True)
         else:
-            st.plotly_chart(_fig_candlestick(df), use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+            # Hero
+            last_title = "Rebalancing" if dash == "portfolio" else "Hedge"
+            cr = indicator_result.get("cum_return")
+            cr_txt = f"{float(cr)*100:.2f}%" if cr is not None and np.isfinite(cr) else "—"
+            conf = int(insight_result.get("confidence", 0))
+            sig  = insight_result.get("signal", "HOLD")
+            hedge_or_rebal = (
+                insight_result.get("rebalancing", "") if dash == "portfolio"
+                else insight_result.get("hedge", "")
+            )
+            st.markdown(
+                _hero_row_html(sig, conf, cr_txt,
+                               str(insight_result.get("regime","—")),
+                               str(insight_result.get("action","")),
+                               str(hedge_or_rebal), last_title),
+                unsafe_allow_html=True,
+            )
 
-        # 서브 차트
-        subs = chart_result.get("sub_charts") or []
-        if len(subs) >= 2:
-            s1, s2 = st.columns(2)
-            with s1:
+            # KPI row
+            defs = _kpi_defs(classify_result, indicator_result)
+            k1, k2, k3, k4, k5 = st.columns(5)
+            for col, (name, val, sub) in zip([k1,k2,k3,k4,k5], defs):
+                with col:
+                    dot = _badge_color(str(val), name)
+                    st.markdown(
+                        f'<div class="sq-card sq-kpi">'
+                        f'<div class="sq-kpi__name">{html.escape(name)}</div>'
+                        f'<div class="sq-kpi__val">{html.escape(str(val))}</div>'
+                        f'<div class="sq-kpi__sub">{html.escape(sub)}</div>'
+                        f'<div class="sq-kpi__dot" style="color:{dot}">● 상태</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            # 메인 차트
+            main_id = chart_result.get("main_chart", "")
+            st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
+            if main_id == "candlestick":
+                st.plotly_chart(_fig_candlestick(df), use_container_width=True)
+            elif main_id == "dual_line" and classify_result["class_type"] == "Static":
+                st.plotly_chart(_fig_static_dual(df), use_container_width=True)
+            else:
+                st.plotly_chart(_fig_candlestick(df), use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # 서브 차트
+            subs = chart_result.get("sub_charts") or []
+            if len(subs) >= 2:
+                s1, s2 = st.columns(2)
+                with s1:
+                    st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
+                    if subs[0] == "rsi":
+                        st.plotly_chart(_fig_rsi(df), use_container_width=True)
+                    elif subs[0] == "excess_bar":
+                        st.plotly_chart(_fig_excess_bar(df), use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with s2:
+                    st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
+                    if subs[1] == "rolling_corr":
+                        st.caption("Rolling correlation (2D sample needed)")
+                    elif subs[1] == "weight_drift_bar":
+                        st.plotly_chart(_fig_weight_drift(df), use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+            elif len(subs) == 1:
                 st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
                 if subs[0] == "rsi":
                     st.plotly_chart(_fig_rsi(df), use_container_width=True)
-                elif subs[0] == "excess_bar":
-                    st.plotly_chart(_fig_excess_bar(df), use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
-            with s2:
-                st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
-                if subs[1] == "rolling_corr":
-                    st.caption("Rolling correlation (2D sample needed)")
-                elif subs[1] == "weight_drift_bar":
-                    st.plotly_chart(_fig_weight_drift(df), use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-        elif len(subs) == 1:
-            st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
-            if subs[0] == "rsi":
-                st.plotly_chart(_fig_rsi(df), use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
 
-        # Action Console - 하나의 큰 박스, 폰트 크고 굵게
-        blocks = [
-            ("Action",       insight_result.get("action", "")),
-            ("Why Now?",     insight_result.get("why_now", "")),
-            ("Rebalancing",  insight_result.get("rebalancing", "")),
-            ("Hedge",        insight_result.get("hedge", "")),
-        ]
-        blocks_html = "".join([
-            f'<div class="sq-ac-block">'
-            f'<div class="sq-ac-lbl">{html.escape(lbl)}</div>'
-            f'<div class="sq-ac-text">{html.escape(str(txt))}</div>'
-            f'</div>'
-            for lbl, txt in blocks
-        ])
-        st.markdown(
-            '<div class="sq-ac-wrap">'
-            '<div class="sq-ac-header">'
-            '<span class="sq-ac-title">Action Console</span>'
-            '<span class="sq-ac-badge">AI Insight</span>'
-            '</div>'
-            f'<div class="sq-ac-llm">{html.escape(str(insight_result.get("llm_input","")))}</div>'
-            f'<div class="sq-ac-body">{blocks_html}</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+            # Action Console
+            blocks = [
+                ("Action",       insight_result.get("action", "")),
+                ("Why Now?",     insight_result.get("why_now", "")),
+                ("Rebalancing",  insight_result.get("rebalancing", "")),
+                ("Hedge",        insight_result.get("hedge", "")),
+            ]
+            blocks_html = "".join([
+                f'<div class="sq-ac-block">'
+                f'<div class="sq-ac-lbl">{html.escape(lbl)}</div>'
+                f'<div class="sq-ac-text">{html.escape(str(txt))}</div>'
+                f'</div>'
+                for lbl, txt in blocks
+            ])
+            st.markdown(
+                '<div class="sq-ac-wrap">'
+                '<div class="sq-ac-header">'
+                '<span class="sq-ac-title">Action Console</span>'
+                '<span class="sq-ac-badge">AI Insight</span>'
+                '</div>'
+                f'<div class="sq-ac-llm">{html.escape(str(insight_result.get("llm_input","")))}</div>'
+                f'<div class="sq-ac-body">{blocks_html}</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )

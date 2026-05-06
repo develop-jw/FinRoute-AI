@@ -197,38 +197,41 @@
 
 ## 4-9. 엔진 뷰 구성 규칙
 
-**전환 조건**
-- ⚙️ 클릭 → 엔진 뷰 전환, 차원 탭 비활성화
-- 🏠 클릭 → 메인 대시보드 복귀, 차원 탭 활성화
+**전환 조건 및 네비게이션 로직**
+- **⚙️ Engine 클릭:** 엔진 뷰로 전환. (데이터 분석/추론 과정 노출, 차원 탭 비활성화)
+- **📊 Dashboard 클릭:** 대시보드 뷰로 전환. (메인 분석 화면 노출, 차원 탭 활성화)
+- **🏠 Home 클릭:** 홈 뷰로 전환. (초기 업로드 화면 및 시장 요약 노출, 차원 탭 비활성화)
+
+*제약 조건:* CSV 데이터가 업로드되지 않은 상태에서는 Dashboard와 Engine 뷰 진입이 제한되거나, 진입 시 "데이터 업로드 필요" 빈 화면을 띄운다.
 
 **포함 섹션 (위 → 아래 순서)**
-```
-① 전체 분석 파이프라인
-   18D 벡터 추출 → 클래스 분류 → 차원 판별 → 시각화 출력
-   현재 판별 결과를 각 단계 아래에 표시
+**① Analysis Pipeline (전체 분석 파이프라인)**
+- 4단계 순차 fade-in 애니메이션 적용 (`18D Vector` → `Class` → `Dimension` → `Visualization`)
+- 하단에 현재 판별 결과 명확히 표시 (`class_type` / `dimension` / `dashboard`)
 
-② 클래스 분류 결과 (코사인 유사도)
-   - 시계열 / 스냅샷 / 매매활동 유사도를 카드 형태로 표시
-   - 1위 클래스 강조
-   - classify_result["similarity"] 값 사용
+**② Goal Inference (분석 의도 및 목적 추론)**
+- **Active Goal Chips:** `_GOAL_META` 기준 추론된 목적들을 칩 형태로 나열 (ON 상태는 틸 색상 포인트, OFF는 회색 비활성)
+- **Reasoning Log (추론 근거):** 활성화된 목적이 어떤 벡터/컬럼에 의해 트리거되었는지 인과관계 명시 (예: `[비중 최적화] ← Target Weight 및 Weight 벡터 동시 감지`)
+- **LLM Prompt Preview:** 최종 조합된 `insight_result["llm_input"]` 문장을 고정폭 폰트(Monospace)와 짙은 배경의 박스 안에 터미널 로그처럼 노출하여 시스템 투명성 강조
 
-③ 18D 특성 벡터
-   - 4개 그룹으로 분류 표시
-     · 가격 시계열: Date / Open / High / Low / Close / Volume
-     · 거래 활동: Timestamp / Buy·Sell / Quantity / Price / Fee
-     · 자산 구조: Asset Name / Holding Amt / Weight / Current Val
-     · 성과·계획: 기여도 / 목표값 / 예상치
-   - classify_result["vector"] 값으로 감지 여부(0/1) 표시
+**③ Class Similarity & System Meta (클래스 분류 결과 및 엔진 상태)**
+- **Class Similarity:** 시계열 / 스냅샷 / 매매활동 3개 카드로 코사인 유사도(%) 표시. 1위(Best Match) 클래스는 카드 배경색 하이라이트 적용.
+- **Data Meta & Engine Status:** 하단에 슬림한 정보 바(Bar) 형태로 배치
+  - 데이터 품질: `Total Rows`, `Missing Values` 등 원본 CSV 메타 정보 노출
+  - 활성 엔진 상태: `[Active Engine: Anthropic LLM 🟢]` 또는 `[Active Engine: Quant Rule Engine (Fallback) 🟡]` 로 표시하여 하이브리드 로직의 안정성 증명
 
-④ 분석 목적 자동 추론
-   - classify_result["goals"] 결과를 ON/OFF 카드로 크게 표시
-   - 추론 조건식과 목적 설명 포함
-   - insight_result["llm_input"] 연결 지점 명시
-```
+**④ 18D Feature Vector (Input Scan)**
+- **3개 클래스 그룹 × 6열 매트릭스** 구조로 전면 개편하여 내부 분류 알고리즘과의 정합성 확보
+- 각 그룹별 6개 감지 대상 컬럼:
+  1. **TimeSeries (시계열):** `Date` / `Open` / `High` / `Low` / `Close` / `Volume`
+  2. **Static (스냅샷):** `Asset(Name)` / `Weight` / `Target` / `Value` / `Return` / `Quarter(Date)`
+  3. **Activity (매매):** `Timestamp` / `Buy/Sell` / `Quantity` / `Price` / `Fee` / `Ticker`
+- 감지된 항목(1): 틸 배경 + 틸 테두리 + "●" 아이콘으로 시각적 강조
+- 미감지 항목(0): 흰 배경 + 회색 테두리 + "·" 아이콘으로 비활성 처리
 
 **규칙**
-- 엔진 뷰는 현재 선택된 차원 기준으로 표시
-- 우측 배너는 엔진 뷰에서도 동일하게 유지
+- 엔진 뷰는 현재 선택된 차원 기준으로 렌더링된다.
+- 우측 배너는 엔진 뷰에서도 메인 대시보드와 동일하게 유지하여 화면의 통일성을 지킨다.
 
 ---
 
