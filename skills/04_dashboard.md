@@ -1,6 +1,6 @@
 # 04_dashboard.md — 대시보드 구성 규칙
 
-> dashboard_builder.py 구현 규칙을 정의한다.
+> dashboard_builder.py 구현 규칙을 정의한다.  
 > classify_result, indicator_result, chart_result, insight_result, df, mkt_data를 입력받아 화면을 렌더링한다.
 
 ---
