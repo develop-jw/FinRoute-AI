@@ -1,62 +1,77 @@
 # 04_dashboard.md — 대시보드 구성 규칙
 
 > dashboard_builder.py 구현 규칙을 정의한다.
-> chart_selector.py(Section 3) 결과를 받아 화면을 어디에, 어떤 순서로, 어떻게 렌더링할지를 담당한다.
+> classify_result, indicator_result, chart_result, insight_result, df, mkt_data를 입력받아 화면을 렌더링한다.
 
 ---
 
 ## 4-1. 전체 레이아웃 구조
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                     탑바 (Topbar)                     │
-├──────────┬──────────────────────────────┬─────────────┤
-│  좌측    │        중앙 메인 영역         │  우측 배너  │
-│  배너    │       (스크롤 가능)           │  (고정)     │
-│  (72px)  │                              │  (260px)    │
-└──────────┴──────────────────────────────┴─────────────┘
+┌───────────┬──────────────────────────────┬──────────────┐
+│   좌측    │         중앙 메인             │  우측 배너   │
+│ (Sidebar) │         (스크롤)             │    (고정)    │
+│           │                              │              │
+│ 로고      │  Home: 시장 지표 카드         │  Market      │
+│ Menu      │  Dashboard: Hero → KPI →     │  Indicators  │
+│ Home      │    차트 → Action Console     │              │
+│ Dashboard │  Engine: 파이프라인 →         │  Insights    │
+│ Engine    │    유사도 → 벡터 → 목적       │  (Events /   │
+│           │                              │  Goals /     │
+│ 차원탭    │                              │  Signal /    │
+│ CSV Upload│                              │  News)       │
+└───────────┴──────────────────────────────┴──────────────┘
 ```
 
-| 영역 | 역할 | 고정 여부 |
-|------|------|-----------|
-| 탑바 | 로고 + 차원 탭 (1D / 2D / ND) | sticky |
-| 좌측 배너 | 화면 전환 아이콘 + CSV 업로드 | sticky |
-| 중앙 메인 | Hero → KPI → 차트 → Action Console | 스크롤 |
-| 우측 배너 | 자동감지 이벤트 + 분석 목적 추론 + 계산 지표 | sticky |
+| 영역 | 역할 |
+|------|------|
+| 좌측 (Sidebar) | 뷰 전환 + 차원 표시 + CSV 업로드 |
+| 중앙 메인 | 뷰별 콘텐츠 렌더링 (스크롤) |
+| 우측 배너 | 시장 지표 + Insights (Home 뷰 제외) |
 
 ---
 
-## 4-2. 중앙 메인 레이어 배치 순서
+## 4-2. 뷰 분기 규칙
 
-아래 순서를 반드시 준수한다.
+`fin_view` 값에 따라 중앙 콘텐츠를 분기한다.
 
-```
-1. Hero Decision Layer
-2. KPI 카드 행
-3. 메인 차트
-4. 서브 차트 (존재할 경우)
-5. Action Console
-```
+| fin_view | 중앙 콘텐츠 | 우측 배너 |
+|----------|-------------|-----------|
+| "home" | 시장 지표 카드 + 스파크라인 | 없음 |
+| "main" | Hero → KPI → 차트 → Action Console | 있음 |
+| "engine" | 파이프라인 → 유사도 → 벡터 → 목적 | 있음 |
 
-**금지 사항**
-- 파이프라인 정보(클래스 분류, 벡터값)를 중앙 메인 상단에 노출하지 않는다
-- Action Console을 차트보다 위에 배치하지 않는다
-- 분석 엔진 근거는 반드시 엔진 뷰(⚙️)에만 배치한다
+**CSV 미업로드 시**
+- Home 뷰: 시장 지표만 표시
+- Dashboard·Engine 뷰: 업로드 안내 화면 표시
+
+**뷰 전환 시 데이터 유지 규칙**
+- Dashboard ↔ Engine: 업로드된 CSV 데이터 유지
+- Home 이동 시: 데이터 초기화
 
 ---
 
-## 4-3. 탑바 구성 규칙
+## 4-3. Sidebar 구성 규칙
 
-**포함 요소**
+**포함 요소 (위 → 아래)**
 ```
-[FinRoute AI 로고]  |  [차원 탭: 1D / 2D / ND]
+[FinRoute AI 로고]
+────────────────
+MENU
+  Home      버튼
+  Dashboard 버튼
+  Engine    버튼
+────────────────
+DATA DIMENSION
+  [1D] [2D] [ND]  ← classify_result["dimension"] 자동 활성화
+────────────────
+CSV UPLOAD
+  파일 업로드 위젯
 ```
 
 **규칙**
-- 로고 클릭 시 메인 화면으로 복귀
-- 차원 탭은 classify_result["dimension"] 값을 기본 선택 상태로 초기화
-- 탑바에 시그널(HOLD/BUY/REDUCE) 배지를 표시하지 않는다 
-- 엔진 뷰 활성화 시 차원 탭 비활성화 (opacity: 0.4, pointer-events: none)
+- 활성 뷰 버튼 강조 표시
+- 차원 탭은 자동 결정이며 사용자가 변경할 수 없다
 
 ---
 
@@ -101,69 +116,83 @@
 **5개 블록 고정 구성 (순서 변경 불가)**
 
 ```
-┌──────────┬──────────────┬─────────────┬──────────────────┬──────────┐
-│  Live    │    Total     │    Risk     │    Suggested     │  Hedge / │
-│  Signal  │    Return    │    Regime   │     Action       │ 리밸런싱 │
-└──────────┴──────────────┴─────────────┴──────────────────┴──────────┘
+┌──────────┬──────────────┬─────────────┬──────────────────┬──────────────┐
+│  LIVE    │    TOTAL     │    RISK     │    SUGGESTED     │  HEDGE /     │
+│  SIGNAL  │    RETURN    │    REGIME   │     ACTION       │  REBALANCING │
+└──────────┴──────────────┴─────────────┴──────────────────┴──────────────┘
 ```
 
 | 블록 | 표시 내용 | 데이터 출처 |
 |------|-----------|-------------|
-| Live Signal | BUY / HOLD / REDUCE + 신뢰도 바 | insight_result["signal"], ["confidence"] |
-| Total Return | 기간 누적 수익률 | indicator_result["cum_return"] |
-| Risk Regime | RISK-ON / RISK-OFF | insight_result["regime"] |
-| Suggested Action | 한 줄 행동 지침 | insight_result["action"] |
-| Hedge / 리밸런싱 | 헤지 또는 리밸런싱 제안 | insight_result["hedge"] |
+| LIVE SIGNAL | BUY / HOLD / REDUCE + 신뢰도 progress bar | insight_result["signal"], ["confidence"] |
+| TOTAL RETURN | 기간 누적 수익률 | indicator_result["cum_return"] |
+| RISK REGIME | RISK-ON / RISK-OFF | insight_result["regime"] |
+| SUGGESTED ACTION | 한 줄 행동 지침 | insight_result["action"] |
+| HEDGE / REBALANCING | 헤지 또는 리밸런싱 제안 | insight_result["hedge"] |
 
 **규칙**
-- Hero 배경색 #2c4a32 (짙은 녹색) 고정
-- Live Signal 블록 하단에 신뢰도 바(progress bar) 필수 포함
-- dashboard가 "stock"이면 마지막 블록 → "Hedge"
-- dashboard가 "portfolio"이면 마지막 블록 → "리밸런싱"
+- Hero 배경: 짙은 틸 그라디언트 고정
+- classify_result["dashboard"] == "stock" → 마지막 블록: "HEDGE"
+- classify_result["dashboard"] == "portfolio" → 마지막 블록: "REBALANCING"
 
 ---
 
 ## 4-6. KPI 카드 행 구성 규칙
 
-- 항상 5개 카드, 가로 1열(st.columns(5))로 배치
-- 각 카드 구성: 지표명 / 계산값 / 부연 설명 / 상태 배지
-- 상태 배지 색상
-  - 양호 → 초록
-  - 주의 → 주황
-  - 위험 → 빨강
-  - 중립 → 회색
+- 항상 5개 카드, 가로 1열 배치
+- 각 카드: 지표명 / 계산값 / 부연 설명 / 상태 배지
+- 상태 배지: 양호(초록) / 주의(주황) / 위험(빨강) / 중립(회색)
 - KPI 카드 hover 시 위로 튀어오르는 애니메이션 적용
 
 ---
 
 ## 4-7. 우측 배너 구성 규칙
 
-**3개 섹션 고정 구성 (위 → 아래 순서)**
+**2개 독립 박스 구성**
 
 ```
-① 자동 감지 이벤트
-② 분석 목적 추론
-③ 계산 지표
+[박스1] Market Indicators
+────────────────────────
+[박스2] Insights
+  ① Auto Events
+  ② Analysis Goals
+  ③ Signal History
+  ④ Related News
 ```
 
-**① 자동 감지 이벤트**
-- 현재 차원 기준 감지 이벤트를 최신순으로 표시
-- 이벤트 유형별 색상 구분
-  - 매수 시그널 → 초록
-  - 매도 시그널 → 빨강
-  - 경고 → 주황
-- 차원 탭 전환 시 해당 차원의 이벤트로 즉시 업데이트
-- hover 시 오른쪽 이동 애니메이션 적용
+**[박스1] Market Indicators**
+- KOSPI / NASDAQ / S&P500 / Gold / WTI / USD/KRW
+- 현재가 + 등락률 (상승 초록 / 하락 빨강)
+- 5분 캐시
 
-**② 분석 목적 추론**
-- classify_result["goals"] 결과를 ON/OFF 칩 형태로 표시
-- 각 항목에 추론 조건식 함께 표시
-- 차원 전환 시 해당 차원의 추론 결과로 업데이트
+**① Auto Events**
+- 고정 높이, 내용 많으면 상하 스크롤
+- 이벤트 유형별 색상 구분 (4-10 참조)
+- 이벤트 없을 시 "No events detected"
 
-**③ 계산 지표**
-- 현재 차원에 해당하는 핵심 지표 표시 (4-11 참조)
-- 지표명 / 계산값 / 상태색 3요소로 구성
-- 차트 내 수치와 동일한 값 사용
+**② Analysis Goals**
+- classify_result["goals"] 기반 자동 추론
+- ON(✦) / OFF(○) 칩 형태 표시
+- 영어 코드 미표시
+
+**③ Signal History**
+- 고정 높이, 내용 많으면 상하 스크롤
+- TimeSeries 1D 한정 동작
+- BUY(초록) / REDUCE(빨강) 배경 구분
+- 날짜 역순, 중복 제거, 최대 12건
+
+| 시그널 | 조건 |
+|--------|------|
+| BUY | 골든크로스 (MA20 > MA60 전환) |
+| REDUCE | 데드크로스 (MA20 < MA60 전환) |
+| BUY | RSI < 30 진입 |
+| REDUCE | RSI > 70 진입 |
+
+**④ Related News**
+- CSV 티커 컬럼 자동 감지
+- 숫자 티커 자동 변환: 5930 → 005930 → 005930.KS
+- NewsAPI 우선, Google News RSS 폴백
+- 10분 캐시
 
 ---
 
@@ -262,10 +291,9 @@
 | 비중 이탈 | 실제 비중이 목표 대비 ±5%p 초과 | Static 1D/2D | 주황 |
 
 **규칙**
-- 이벤트는 날짜 역순 정렬 (최신 → 상단)
-- 차원 전환 시 해당 차원의 이벤트만 표시
-- 이벤트 없을 시 "현재 감지된 이벤트 없음" 표시
-- 이벤트 발생 날짜는 메인 차트 위에 마커로 동시 표시
+- 동일 유형 중복 제거: label별 첫 발생일만 표시
+- 최대 8건, 날짜 역순 정렬
+- 이벤트 없을 시 "No events detected"
 
 ---
 
