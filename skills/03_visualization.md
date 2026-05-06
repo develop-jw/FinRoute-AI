@@ -1,4 +1,4 @@
-## 3. Class × Dimension별 시각화 차트 선택 기준
+# 03_Visualization.md - Class × Dimension별 시각화 차트 선택 기준
 
 중앙 메인 영역의 메인 차트와 서브 차트는 `classify_result["class_type"]` × `classify_result["dimension"]` 조합에 따라 자동 배치한다. 
 *배치 규칙: 서브 차트가 2개인 경우 2열(`st.columns(2)`)로 분할 배치하고, 1개인 경우 전체 너비로 배치한다.*
