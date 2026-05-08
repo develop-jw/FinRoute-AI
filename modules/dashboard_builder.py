@@ -610,22 +610,43 @@ def build(
         
         _render_home_charts(mkt_data)
 
+                # 3. 드래그 앤 드롭 업로드 영역 (CSS로 파일 업로더 자체에 점선 박스 씌우기)
         st.markdown("""
-        <div style="border: 2px dashed var(--sq-teal); padding: 40px; text-align: center; border-radius: 14px; background-color: transparent; margin-top: 30px; margin-bottom: 10px;">
-            <h3 style="color: var(--sq-teal); margin-bottom: 10px;">📂 분석할 포트폴리오/종목 CSV를 이곳에 드래그하세요</h3>
-            <p style="color: var(--sq-muted); font-size:0.9rem;">어떤 파일을 올려야 할지 모르겠나요? <a href="#" style="color:var(--sq-teal); font-weight:bold;">[샘플 다운로드]</a></p>
-        </div>
+        <style>
+        /* 파일 업로더 전체 영역에 점선 테두리와 여백 주기 */
+        [data-testid="stFileUploader"] {
+            border: 2px dashed var(--sq-teal);
+            padding: 35px 20px;
+            border-radius: 14px;
+            margin-top: 30px;
+            background-color: transparent;
+        }
+        /* 파일 업로더의 기본 라벨(제목)을 크고 가운데 정렬되게 꾸미기 */
+        [data-testid="stFileUploader"] > label {
+            display: flex;
+            justify-content: center;
+            font-size: 1.3rem !important;
+            font-weight: 800 !important;
+            color: var(--sq-teal) !important;
+            margin-bottom: 15px;
+        }
+        </style>
         """, unsafe_allow_html=True)
 
-
-        uploaded_main = st.file_uploader(" ", type=["csv"], key="main_csv_upload", label_visibility="collapsed")
+        # 숨겨두었던 라벨(label_visibility) 옵션을 빼고 제목을 직접 넣어줍니다.
+        uploaded_main = st.file_uploader(
+            "📂 분석할 포트폴리오/종목 CSV를 아래에 드래그하세요", 
+            type=["csv"], 
+            key="main_csv_upload"
+        )
+        
         if uploaded_main:
-            # 화면이 넘어가 파일이 날아가기 전에, 데이터프레임으로 읽어서 안전하게 백업합니다.
+            import pandas as pd
             st.session_state['saved_df'] = pd.read_csv(uploaded_main) 
             st.session_state.fin_view = "main"
             st.rerun()
         return
-
+    
     if classify_result is None or df is None:
         mc, rc = st.columns([74, 26], gap="medium")
         with mc:
