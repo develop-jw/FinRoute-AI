@@ -616,9 +616,12 @@ def build(
             <p style="color: var(--sq-muted); font-size:0.9rem;">어떤 파일을 올려야 할지 모르겠나요? <a href="#" style="color:var(--sq-teal); font-weight:bold;">[샘플 다운로드]</a></p>
         </div>
         """, unsafe_allow_html=True)
-        
+
+
         uploaded_main = st.file_uploader(" ", type=["csv"], key="main_csv_upload", label_visibility="collapsed")
         if uploaded_main:
+            # 화면이 넘어가 파일이 날아가기 전에, 데이터프레임으로 읽어서 안전하게 백업합니다.
+            st.session_state['saved_df'] = pd.read_csv(uploaded_main) 
             st.session_state.fin_view = "main"
             st.rerun()
         return

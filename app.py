@@ -79,22 +79,29 @@ with st.sidebar:
 # ── 데이터 로드 ───────────────────────────────
 df: pd.DataFrame | None = None
 fname = ""
+
+# 1. 사이드바에서 새로 파일을 업로드한 경우
 if uploaded is not None:
     df = pd.read_csv(uploaded)
     fname = uploaded.name
+    # 사이드바에서 올려도 세션에 백업해두기 (안전장치)
+    st.session_state['saved_df'] = df 
 
-classify_result: dict | None = None
-if df is not None and not df.empty:
-    classify_result = classify(df)
-
-with dim_section.container():
-    dim = classify_result["dimension"] if classify_result else None
-    st.markdown(dimension_pills_html(dim), unsafe_allow_html=True)
+# 2. 홈 화면에서 업로드하여 세션에 백업된 데이터가 있는 경우
+elif 'saved_df' in st.session_state:
+    df = st.session_state['saved_df']
+    fname = "Uploaded_Data.csv" # 홈에서 올린 파일명 임시 처리
 
 # ── 메인 렌더 ─────────────────────────────────
+classify_result  = None
 indicator_result = None
 chart_result     = None
 insight_result   = None
+
+# 데이터(df)가 정상적으로 로드되었다면 가장 먼저 분류 엔진을 돌립니다.
+if df is not None:
+    classify_result = classify(df)
+
 if classify_result is not None and df is not None:
     indicator_result = calculate(df, classify_result)
     chart_result     = select_chart(classify_result)
