@@ -9,6 +9,9 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import feedparser
+
+from urllib.parse import quote  # URL 인코딩을 위해 추가
 
 # Sequence 스타일: Streamlit 네이티브 테마 완벽 연동
 THEME_CSS = """
@@ -583,6 +586,70 @@ def _render_home_charts(mkt_data: list) -> None:
                 shapes=[dict(type="rect", xref="paper", yref="paper", x0=0, y0=0, x1=1, y1=1, line=dict(color="rgba(128,128,128,0.2)", width=1.5), fillcolor="rgba(0,0,0,0)", layer="below")]
             )
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+def _calculate_trading_bias(df: pd.DataFrame) -> tuple[int, str, str]:
+    """10개의 기술적 지표를 앙상블하여 Trading Bias(0~100%)와 라벨을 반환합니다."""
+    if df is None or df.empty: return 50, "Neutral", "var(--sq-warn)"
+    
+    dc = _find_col(df, "date", "datetime")
+    cc = _find_col(df, "close")
+    if not cc: return 50, "Neutral", "var(--sq-warn)"
+
+    w = df.sort_values(dc) if dc else df.copy()
+    close = pd.to_numeric(w[cc], errors="coerce").ffill()
+    
+    # 데이터가 부족하면 기본값 반환
+    if len(close) < 60: return 50, "Neutral", "var(--sq-warn)"
+
+    score, max_score = 0, 10
+    c_last = close.iloc[-1]
+
+    try:
+        # 1. 단기 추세: 현재가 > MA20
+        if c_last > close.rolling(20).mean().iloc[-1]: score += 1
+        # 2. 장기 추세: 현재가 > MA60
+        if c_last > close.rolling(60).mean().iloc[-1]: score += 1
+        # 3. 배열 상태: MA20 > MA60 (정배열)
+        if close.rolling(20).mean().iloc[-1] > close.rolling(60).mean().iloc[-1]: score += 1
+        
+        # 4. 모멘텀: RSI(14) > 50
+        dlt = close.diff()
+        g = dlt.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
+        l = (-dlt.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
+        rs = g / l.replace(0, np.nan)
+        rsi = 100 - (100 / (1 + rs))
+        if rsi.iloc[-1] > 50: score += 1
+        
+        # 5. MACD 오실레이터: MACD > 0
+        ema12 = close.ewm(span=12, adjust=False).mean()
+        ema26 = close.ewm(span=26, adjust=False).mean()
+        macd = ema12 - ema26
+        if macd.iloc[-1] > 0: score += 1
+        # 6. MACD 시그널 돌파: MACD > Signal(9)
+        if macd.iloc[-1] > macd.ewm(span=9, adjust=False).mean().iloc[-1]: score += 1
+        
+        # 7. 단기 과열: 현재가 > MA5
+        if c_last > close.rolling(5).mean().iloc[-1]: score += 1
+        # 8. 주간 수익: 5일 전 대비 상승
+        if c_last > close.iloc[-6]: score += 1
+        # 9. 일간 수익: 전일 대비 상승
+        if c_last > close.iloc[-2]: score += 1
+
+        # 10. 거래량 활성: 현재 거래량 > MA20 거래량
+        vc = _find_col(df, "volume")
+        if vc:
+            vol = pd.to_numeric(w[vc], errors="coerce").fillna(0)
+            if vol.iloc[-1] > vol.rolling(20).mean().iloc[-1]: score += 1
+        else:
+            max_score -= 1 # 거래량 컬럼이 없으면 9점 만점으로 조정
+            
+    except Exception:
+        pass
+
+    # 최종 점수 환산 및 컬러 배정
+    pct = int((score / max_score) * 100)
+    if pct >= 60: return pct, "Bullish", "var(--sq-mint)"
+    if pct <= 40: return pct, "Bearish", "var(--sq-danger)"
+    return pct, "Neutral", "var(--sq-warn)"
 
 def build(
     view: str,
@@ -691,16 +758,52 @@ def build(
             icon = '✦' if on else '○'
             goals_html += f'<span class="sq-goal-chip {"sq-goal-on" if on else "sq-goal-off" }"><span style="font-size:0.7rem">{icon}</span> {title}</span>'
 
-        ind_html = ""
-        for name, val, _sub in _kpi_defs(classify_result, indicator_result):
-            dot_color = _badge_color(str(val), name)
-            ind_html += f'<div class="sq-ind-row"><span class="sq-ind-name">{html.escape(name)}</span><span class="sq-ind-val" style="color:{dot_color}">{html.escape(str(val))}</span></div>'
+        # --- [신규 추가] ③ Trading Bias HTML 게이지 생성 로직 ---
+        if classify_result["class_type"] == "TimeSeries":
+            pct, label, color = _calculate_trading_bias(df)
+            deg = 180 * (pct / 100)
+            bias_html = f'''
+            <div style="position:relative; width:160px; height:80px; overflow:hidden; margin: 15px auto 5px;">
+                <div style="position:absolute; bottom:0; left:0; width:160px; height:80px; border-radius: 160px 160px 0 0; background: conic-gradient(from 270deg, {color} 0deg, {color} {deg}deg, rgba(128,128,128,0.15) {deg}deg, rgba(128,128,128,0.15) 180deg);">
+                    <div style="position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:128px; height:64px; border-radius: 128px 128px 0 0; background: var(--sq-surface);"></div>
+                </div>
+            </div>
+            <div style="text-align:center; padding-bottom:10px;">
+                <div style="font-size:2rem; font-weight:800; color:{color}; line-height:1;">{pct}%</div>
+                <div style="font-size:0.85rem; font-weight:700; color:{color}; letter-spacing:0.05em; text-transform:uppercase; margin-top:4px;">{label}</div>
+            </div>
+            '''
+        else:
+            bias_html = '<p style="font-size:0.82rem;color:var(--sq-muted);text-align:center;margin:20px 0;">시계열 데이터 전용</p>'
 
+        # 기존 ③ Key Indicators를 ③ Trading Bias로 교체하여 렌더링
         st.markdown(
             f'<div class="sq-rail"><div class="sq-rail-section"><div class="sq-rail-title">① Auto Events</div><div class="sq-feed-scroll">{feed_items}</div></div>'
             f'<div class="sq-rail-section" style="margin-top:16px"><div class="sq-rail-title">② Analysis Goals</div><div style="display:flex;flex-wrap:wrap;gap:4px;line-height:2">{goals_html}</div></div>'
-            f'<div class="sq-rail-section" style="margin-top:16px"><div class="sq-rail-title">③ Key Indicators</div>{ind_html}</div></div>',
+            f'<div class="sq-rail-section" style="margin-top:16px"><div class="sq-rail-title">③ Trading Bias</div>{bias_html}</div></div>',
             unsafe_allow_html=True,
+        )
+
+        # --- ④ Contextual News 섹션 ---
+        query = _get_dynamic_query(classify_result, indicator_result, df)
+        news_items = _render_news(query)
+        st.markdown(
+            f'''
+            <div class="sq-rail" style="margin-top:16px">
+                <div class="sq-rail-section">
+                    <div class="sq-rail-title">④ Contextual News</div>
+                    <div style="margin-bottom:8px;">
+                        <span class="sq-ac-badge" style="font-size:0.65rem; background:rgba(29,209,161,0.1); color:var(--sq-mint);">
+                            Topic: {query}
+                        </span>
+                    </div>
+                    <div class="sq-feed-scroll">
+                        {news_items}
+                    </div>
+                </div>
+            </div>
+            ''', 
+            unsafe_allow_html=True
         )
 
     with mc:
@@ -841,3 +944,47 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
                 f'<div class="sq-ac-llm">{html.escape(str(insight_result.get("llm_input","")))}</div><div class="sq-ac-body">{blocks_html}</div></div>',
                 unsafe_allow_html=True,
             )
+
+def _render_news(query: str) -> str:
+    """RSS 피드에서 뉴스를 가져와 HTML 리스트로 반환"""
+    # 검색어의 공백이나 특수문자를 URL용 안전한 문자로 변환 (예: ' ' -> '%20')
+    encoded_query = quote(query)
+    
+    # 변환된 검색어를 URL에 삽입
+    rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
+    
+    feed = feedparser.parse(rss_url)
+    # ... (이후 코드는 동일)
+    
+    news_html = ""
+    # 상위 5개 뉴스 추출
+    for entry in feed.entries[:5]:
+        # 대시보드 테마인 sq-feed-item 스타일 활용
+        news_html += (
+            f'<div class="sq-feed-item" style="border-left:4px solid var(--sq-teal-mid)">'
+            f'<a href="{entry.link}" target="_blank" style="text-decoration:none; color:inherit;">'
+            f'<b style="font-size:0.82rem; line-height:1.4;">{html.escape(entry.title)}</b></a><br/>'
+            f'<small style="color:var(--sq-muted)">{html.escape(entry.published[:16])}</small></div>'
+        )
+    return news_html
+
+def _get_dynamic_query(classify_result: dict, indicator_result: dict, df: pd.DataFrame): # df 추가!
+    ct = classify_result.get("class_type")
+    
+    if ct == "TimeSeries":
+        # 여기서 df를 사용하기 때문에 인자에 df가 반드시 있어야 합니다.
+        close_col = _find_col(df, "close") 
+        if close_col and df[close_col].mean() < 1000:
+            return "미국 증시 나스닥 시황"
+        return "국내 증시 코스피 전망"
+
+    # 2. 포트폴리오/자산 구성 데이터인 경우
+    elif ct == "Static":
+        # 리스크 기여도가 가장 높은 자산(max_risk_asset)이 있다면 해당 자산 뉴스
+        asset = indicator_result.get("max_risk_asset")
+        if asset and asset != "—":
+            return f"{asset} 전망"
+        return "자산 배분 투자 전략"
+
+    # 3. 그 외 기본값
+    return "금융 시장 주요 뉴스"
