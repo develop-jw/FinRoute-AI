@@ -758,35 +758,27 @@ def build(
             icon = '✦' if on else '○'
             goals_html += f'<span class="sq-goal-chip {"sq-goal-on" if on else "sq-goal-off" }"><span style="font-size:0.7rem">{icon}</span> {title}</span>'
 
-        # --- [신규 추가] ③ Trading Bias HTML 게이지 생성 로직 ---
-        if classify_result["class_type"] == "TimeSeries":
-            pct, label, color = _calculate_trading_bias(df)
-            deg = 180 * (pct / 100)
-            bias_html = f'''
-            <div style="position:relative; width:160px; height:80px; overflow:hidden; margin: 15px auto 5px;">
-                <div style="position:absolute; bottom:0; left:0; width:160px; height:80px; border-radius: 160px 160px 0 0; background: conic-gradient(from 270deg, {color} 0deg, {color} {deg}deg, rgba(128,128,128,0.15) {deg}deg, rgba(128,128,128,0.15) 180deg);">
-                    <div style="position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:128px; height:64px; border-radius: 128px 128px 0 0; background: var(--sq-surface);"></div>
-                </div>
-            </div>
-            <div style="text-align:center; padding-bottom:10px;">
-                <div style="font-size:2rem; font-weight:800; color:{color}; line-height:1;">{pct}%</div>
-                <div style="font-size:0.85rem; font-weight:700; color:{color}; letter-spacing:0.05em; text-transform:uppercase; margin-top:4px;">{label}</div>
-            </div>
-            '''
-        else:
-            bias_html = '<p style="font-size:0.82rem;color:var(--sq-muted);text-align:center;margin:20px 0;">시계열 데이터 전용</p>'
+        ind_html = ""
+        for name, val, _sub in _kpi_defs(classify_result, indicator_result):
+            dot_color = _badge_color(str(val), name)
+            ind_html += f'<div class="sq-ind-row"><span class="sq-ind-name">{html.escape(name)}</span><span class="sq-ind-val" style="color:{dot_color}">{html.escape(str(val))}</span></div>'
 
-        # 기존 ③ Key Indicators를 ③ Trading Bias로 교체하여 렌더링
         st.markdown(
             f'<div class="sq-rail"><div class="sq-rail-section"><div class="sq-rail-title">① Auto Events</div><div class="sq-feed-scroll">{feed_items}</div></div>'
             f'<div class="sq-rail-section" style="margin-top:16px"><div class="sq-rail-title">② Analysis Goals</div><div style="display:flex;flex-wrap:wrap;gap:4px;line-height:2">{goals_html}</div></div>'
-            f'<div class="sq-rail-section" style="margin-top:16px"><div class="sq-rail-title">③ Trading Bias</div>{bias_html}</div></div>',
+            f'<div class="sq-rail-section" style="margin-top:16px"><div class="sq-rail-title">③ Key Indicators</div>{ind_html}</div></div>',
             unsafe_allow_html=True,
         )
+        # ... 기존 build 함수 내 with rc: 섹션 마지막 부분 ...
 
-        # --- ④ Contextual News 섹션 ---
+        # --- [추가] ④ Contextual News 섹션 ---
+        # 1. 동적 키워드 추출 (df는 build 함수의 인자로 들어옴)
         query = _get_dynamic_query(classify_result, indicator_result, df)
+        
+        # 2. 뉴스 데이터 가져오기 (_render_news 함수 호출)
         news_items = _render_news(query)
+        
+        # 3. 우측 레일에 뉴스 카드 추가
         st.markdown(
             f'''
             <div class="sq-rail" style="margin-top:16px">
