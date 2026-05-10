@@ -650,6 +650,59 @@ def _calculate_trading_bias(df: pd.DataFrame) -> tuple[int, str, str]:
     if pct >= 60: return pct, "Bullish", "var(--sq-mint)"
     if pct <= 40: return pct, "Bearish", "var(--sq-danger)"
     return pct, "Neutral", "var(--sq-warn)"
+def _calculate_trading_bias(df: pd.DataFrame) -> tuple[int, str, str]:
+    """10개의 기술적 지표를 앙상블하여 Trading Bias(0~100%)와 라벨을 반환합니다."""
+    if df is None or df.empty: return 50, "Neutral", "var(--sq-warn)"
+    
+    dc = _find_col(df, "date", "datetime")
+    cc = _find_col(df, "close")
+    if not cc: return 50, "Neutral", "var(--sq-warn)"
+
+    w = df.sort_values(dc) if dc else df.copy()
+    close = pd.to_numeric(w[cc], errors="coerce").ffill()
+    
+    # 데이터가 부족하면 기본값 반환
+    if len(close) < 60: return 50, "Neutral", "var(--sq-warn)"
+
+    score, max_score = 0, 10
+    c_last = close.iloc[-1]
+
+    try:
+        if c_last > close.rolling(20).mean().iloc[-1]: score += 1
+        if c_last > close.rolling(60).mean().iloc[-1]: score += 1
+        if close.rolling(20).mean().iloc[-1] > close.rolling(60).mean().iloc[-1]: score += 1
+        
+        dlt = close.diff()
+        g = dlt.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
+        l = (-dlt.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
+        rs = g / l.replace(0, np.nan)
+        rsi = 100 - (100 / (1 + rs))
+        if rsi.iloc[-1] > 50: score += 1
+        
+        ema12 = close.ewm(span=12, adjust=False).mean()
+        ema26 = close.ewm(span=26, adjust=False).mean()
+        macd = ema12 - ema26
+        if macd.iloc[-1] > 0: score += 1
+        if macd.iloc[-1] > macd.ewm(span=9, adjust=False).mean().iloc[-1]: score += 1
+        
+        if c_last > close.rolling(5).mean().iloc[-1]: score += 1
+        if c_last > close.iloc[-6]: score += 1
+        if c_last > close.iloc[-2]: score += 1
+
+        vc = _find_col(df, "volume")
+        if vc:
+            vol = pd.to_numeric(w[vc], errors="coerce").fillna(0)
+            if vol.iloc[-1] > vol.rolling(20).mean().iloc[-1]: score += 1
+        else:
+            max_score -= 1
+            
+    except Exception:
+        pass
+
+    pct = int((score / max_score) * 100)
+    if pct >= 60: return pct, "Bullish", "var(--sq-mint)"
+    if pct <= 40: return pct, "Bearish", "var(--sq-danger)"
+    return pct, "Neutral", "var(--sq-warn)"
 
 def build(
     view: str,
@@ -758,27 +811,32 @@ def build(
             icon = '✦' if on else '○'
             goals_html += f'<span class="sq-goal-chip {"sq-goal-on" if on else "sq-goal-off" }"><span style="font-size:0.7rem">{icon}</span> {title}</span>'
 
-        ind_html = ""
-        for name, val, _sub in _kpi_defs(classify_result, indicator_result):
-            dot_color = _badge_color(str(val), name)
-            ind_html += f'<div class="sq-ind-row"><span class="sq-ind-name">{html.escape(name)}</span><span class="sq-ind-val" style="color:{dot_color}">{html.escape(str(val))}</span></div>'
+        if classify_result["class_type"] == "TimeSeries":
+            pct, label, color = _calculate_trading_bias(df)
+            deg = 180 * (pct / 100)
+            bias_html = f'''
+            <div style="position:relative; width:160px; height:80px; overflow:hidden; margin: 15px auto 5px;">
+                <div style="position:absolute; bottom:0; left:0; width:160px; height:80px; border-radius: 160px 160px 0 0; background: conic-gradient(from 270deg, {color} 0deg, {color} {deg}deg, rgba(128,128,128,0.15) {deg}deg, rgba(128,128,128,0.15) 180deg);">
+                    <div style="position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:128px; height:64px; border-radius: 128px 128px 0 0; background: var(--sq-surface);"></div>
+                </div>
+            </div>
+            <div style="text-align:center; padding-bottom:10px;">
+                <div style="font-size:2rem; font-weight:800; color:{color}; line-height:1;">{pct}%</div>
+                <div style="font-size:0.85rem; font-weight:700; color:{color}; letter-spacing:0.05em; text-transform:uppercase; margin-top:4px;">{label}</div>
+            </div>
+            '''
+        else:
+            bias_html = '<p style="font-size:0.82rem;color:var(--sq-muted);text-align:center;margin:20px 0;">시계열 데이터 전용</p>'
 
         st.markdown(
             f'<div class="sq-rail"><div class="sq-rail-section"><div class="sq-rail-title">① Auto Events</div><div class="sq-feed-scroll">{feed_items}</div></div>'
             f'<div class="sq-rail-section" style="margin-top:16px"><div class="sq-rail-title">② Analysis Goals</div><div style="display:flex;flex-wrap:wrap;gap:4px;line-height:2">{goals_html}</div></div>'
-            f'<div class="sq-rail-section" style="margin-top:16px"><div class="sq-rail-title">③ Key Indicators</div>{ind_html}</div></div>',
+            f'<div class="sq-rail-section" style="margin-top:16px"><div class="sq-rail-title">③ Trading Bias</div>{bias_html}</div></div>',
             unsafe_allow_html=True,
         )
-        # ... 기존 build 함수 내 with rc: 섹션 마지막 부분 ...
 
-        # --- [추가] ④ Contextual News 섹션 ---
-        # 1. 동적 키워드 추출 (df는 build 함수의 인자로 들어옴)
         query = _get_dynamic_query(classify_result, indicator_result, df)
-        
-        # 2. 뉴스 데이터 가져오기 (_render_news 함수 호출)
         news_items = _render_news(query)
-        
-        # 3. 우측 레일에 뉴스 카드 추가
         st.markdown(
             f'''
             <div class="sq-rail" style="margin-top:16px">
