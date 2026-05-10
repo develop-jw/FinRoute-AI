@@ -10,10 +10,687 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import feedparser
+from streamlit_lightweight_charts import renderLightweightCharts
 
 from urllib.parse import quote  # URL 인코딩을 위해 추가
 
 # Sequence 스타일: Streamlit 네이티브 테마 완벽 연동
+def get_theme_css(theme: str = "light") -> str:
+    """테마에 따른 CSS 반환."""
+    is_dark = (theme == "dark")
+    
+    # 공통 변수
+    base_vars = """
+  --sq-teal-deep: #063d3d;
+  --sq-teal: #0a5c5c;
+  --sq-teal-mid: #0d6e6e;
+  --sq-mint: #1dd1a1;
+  --sq-green: #2ed573;
+  --sq-danger: #e74c3c;
+  --sq-warn: #f39c12;
+  --sq-radius: 14px;
+  --sq-radius-sm: 10px;
+  --sq-font: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    """
+    
+    if is_dark:
+        theme_vars = """
+  --sq-bg: #131722;
+  --sq-surface: #1e222d;
+  --sq-border: #2a2e39;
+  --sq-text: #d1d4dc;
+  --sq-muted: #787b86;
+  --sq-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --sq-shadow-hover: 0 10px 36px rgba(0, 0, 0, 0.5);
+        """
+        app_bg = "#131722"
+        header_bg = "rgba(19, 23, 34, 0.95)"
+        sidebar_bg = "#161b22"
+        sidebar_border = "#2a2e39"
+        card_bg = "#1e222d"
+        feed_item_bg = "#1e222d"
+        mkt_border = "#2a2e39"
+        ac_bg = "#1e222d"
+        ac_block_border = "#2a2e39"
+    else:
+        theme_vars = """
+  --sq-bg: #f8f9fa;
+  --sq-surface: #ffffff;
+  --sq-border: #d1d5db;
+  --sq-text: #111827;
+  --sq-muted: #6b7280;
+  --sq-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  --sq-shadow-hover: 0 4px 6px rgba(0,0,0,0.1);
+        """
+        app_bg = "#f3f4f6"
+        header_bg = "rgba(255, 255, 255, 0.95)"
+        sidebar_bg = "#ffffff"
+        sidebar_border = "#e5e7eb"
+        card_bg = "#ffffff"
+        feed_item_bg = "#f9fafb"
+        mkt_border = "#e5e7eb"
+        ac_bg = "#ffffff"
+        ac_block_border = "#e5e7eb"
+
+    return f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
+:root {{
+    {base_vars}
+    {theme_vars}
+}}
+.stApp {{ background: {app_bg} !important; color: var(--sq-text); font-family: var(--sq-font); }}
+.sq-app-title {{
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.5rem 0;
+  color: var(--sq-text);
+}}
+[data-testid="stAppViewContainer"] > .main {{ background: transparent; }}
+.main .block-container {{
+  padding: 1.25rem 1.75rem 2rem !important;
+  max-width: 100% !important;
+}}
+[data-testid="stHeader"] {{
+  background: {header_bg} !important;
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--sq-border) !important;
+}}
+[data-testid="stToolbar"] {{ background: transparent !important; }}
+h1, h2, h3, h4 {{ color: var(--sq-text) !important; letter-spacing: -0.02em; }}
+.stCaption, [data-testid="stCaptionContainer"] {{ color: var(--sq-muted) !important; }}
+
+.sq-nav-label {{
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--sq-muted);
+  margin: 4px 0 10px 0;
+  text-transform: uppercase;
+}}
+
+/* 히어로 스트립 (다크 틸 + 패턴) */
+.sq-hero-row {{
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 18px;
+  border-radius: var(--sq-radius);
+  background:
+    radial-gradient(ellipse 80% 60% at 12% 20%, rgba(46,213,115,0.14) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 88% 80%, rgba(255,255,255,0.07) 0%, transparent 50%),
+    linear-gradient(135deg, var(--sq-teal-deep) 0%, var(--sq-teal) 42%, var(--sq-teal-mid) 100%);
+  box-shadow: 0 12px 40px rgba(6, 61, 61, 0.22);
+  border: 1px solid rgba(255,255,255,0.06);
+}}
+@media (max-width: 1100px) {{
+  .sq-hero-row {{ grid-template-columns: 1fr 1fr; }}
+}}
+.sq-hero-cell {{
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--sq-radius-sm);
+  padding: 12px 14px;
+  min-height: 102px;
+  color: #f4faf9;
+}}
+.sq-hero-cell__label {{
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+  margin-bottom: 6px;
+  color: rgba(255,255,255,0.85);
+}}
+.sq-hero-cell__value {{
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}}
+.sq-hero-cell__body {{
+  font-size: 0.82rem;
+  opacity: 0.92;
+  line-height: 1.35;
+  color: rgba(255,255,255,0.92);
+}}
+.sq-badge-pos {{
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(46,213,115,0.25);
+  color: #b8ffd4;
+  border: 1px solid rgba(46,213,115,0.45);
+}}
+.sq-progress {{
+  margin-top: 8px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.2);
+  overflow: hidden;
+}}
+.sq-progress > span {{
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--sq-mint), var(--sq-green));
+}}
+
+/* KPI / 차트 카드 */
+.sq-card {{
+  background: var(--sq-surface);
+  border: 1px solid var(--sq-border);
+  border-radius: var(--sq-radius);
+  box-shadow: var(--sq-shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}}
+.sq-card:hover {{
+  transform: translateY(-4px);
+  box-shadow: var(--sq-shadow-hover);
+}}
+.sq-kpi {{
+  padding: 18px 16px;
+  margin-bottom: 10px;
+}}
+.sq-kpi__name {{
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--sq-muted);
+  margin-bottom: 6px;
+}}
+.sq-kpi__val {{
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--sq-text);
+}}
+.sq-kpi__sub {{
+  font-size: 0.78rem;
+  color: var(--sq-muted);
+  margin-top: 4px;
+}}
+.sq-kpi__dot {{
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: inherit;
+}}
+.sq-chart {{
+  padding: 12px 12px 4px;
+  margin-bottom: 14px;
+}}
+
+/* 우측 패널 */
+.sq-rail {{
+  background: var(--sq-surface);
+  border: 1px solid var(--sq-border);
+  border-radius: var(--sq-radius);
+  box-shadow: var(--sq-shadow);
+  padding: 16px 14px;
+}}
+.sq-rail h1, .sq-rail h2, .sq-rail h3, .sq-rail h4, .sq-rail h5 {{
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sq-muted) !important;
+  margin: 0 0 10px 0 !important;
+}}
+.sq-rail p, .sq-rail li, .sq-rail code {{ font-size: 0.85rem; }}
+
+.sq-feed-item {{
+  border-radius: var(--sq-radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  transition: transform 0.15s ease;
+  border: 1px solid var(--sq-border);
+  background: {feed_item_bg};
+}}
+.sq-feed-item:hover {{ transform: translateX(5px); }}
+
+/* 엔진 뷰 메트릭 카드 */
+div[data-testid="stMetric"] {{
+  background: var(--sq-surface);
+  border: 1px solid var(--sq-border);
+  border-radius: var(--sq-radius-sm);
+  padding: 10px;
+  box-shadow: var(--sq-shadow);
+}}
+
+/* Primary 버튼: 민트 그린 */
+.stApp .stButton > button[kind="primary"] {{
+  background: linear-gradient(180deg, var(--sq-green) 0%, #24b963 100%) !important;
+  color: #063d2a !important;
+  border: none !important;
+  font-weight: 600 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 2px 8px rgba(46,213,115,0.35);
+}}
+.stApp .stButton > button[kind="secondary"] {{
+  background: var(--sq-surface) !important;
+  color: var(--sq-teal) !important;
+  border: 1px solid var(--sq-border) !important;
+  border-radius: 10px !important;
+  font-weight: 500 !important;
+}}
+.stApp .stButton > button:disabled {{ opacity: 0.45 !important; }}
+
+/* 네이티브 사이드바 */
+[data-testid="stSidebar"] {{
+  background: {sidebar_bg} !important;
+  border-right: 1px solid {sidebar_border} !important;
+}}
+[data-testid="stSidebar"] > div:first-child {{
+  background: {sidebar_bg} !important;
+}}
+[data-testid="stSidebar"] .block-container {{
+  padding-top: 1rem !important;
+  padding-bottom: 1.25rem !important;
+}}
+.sq-sb-brand {{ margin-bottom: 1.25rem; }}
+.sq-sb-logo-row {{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}}
+.sq-sb-logo-mark {{
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--sq-teal-deep) 0%, var(--sq-teal) 55%, var(--sq-mint) 160%);
+  box-shadow: 0 4px 14px rgba(10, 92, 92, 0.25);
+}}
+.sq-sb-logo-text {{
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--sq-text);
+  line-height: 1.2;
+}}
+.sq-sb-logo-text span {{ color: var(--sq-teal); }}
+.sq-sb-logo-sub {{
+  font-size: 0.72rem;
+  color: var(--sq-muted);
+  margin-top: 2px;
+}}
+.sq-sb-nav-wrap {{ margin: 0.5rem 0 1rem 0; }}
+.sq-sb-nav-row {{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}}
+.sq-sb-nav-row .stButton {{ flex: 1; }}
+.sq-sb-nav-ic {{
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}}
+.sq-sb-upload-cap {{
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sq-muted);
+  margin: 1rem 0 0.35rem 0;
+}}
+.sq-sb-spacer {{ flex-grow: 1; min-height: 8px; }}
+.sq-dim-row {{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}}
+.sq-dim-pill {{
+  flex: 1;
+  min-width: 48px;
+  text-align: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: 1px solid var(--sq-border);
+  box-sizing: border-box;
+}}
+.sq-dim-pill--active {{
+  background: var(--sq-teal);
+  color: #fff;
+  border-color: var(--sq-teal);
+  box-shadow: 0 2px 8px rgba(10, 92, 92, 0.2);
+}}
+.sq-dim-pill--idle {{
+  color: var(--sq-muted);
+  background: {is_dark and "#212a35" or "#f0f3f5"};
+}}
+.sq-dim-note {{
+  font-size: 0.72rem;
+  color: var(--sq-muted);
+  margin: 10px 0 0 0;
+  line-height: 1.4;
+}}
+
+/* 이벤트 스크롤 컨테이너 */
+.sq-feed-scroll {{
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}}
+.sq-feed-scroll::-webkit-scrollbar {{ width: 4px; }}
+.sq-feed-scroll::-webkit-scrollbar-track {{ background: transparent; }}
+.sq-feed-scroll::-webkit-scrollbar-thumb {{ background: #c5d5d0; border-radius: 2px; }}
+
+/* 분석목적 칩 */
+.sq-goal-chip {{
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600;
+  margin: 3px 2px; border: 1px solid;
+}}
+.sq-goal-on  {{ background: rgba(10,92,92,0.1); color: #0a5c5c; border-color: rgba(10,92,92,0.25); }}
+.sq-goal-off {{ background: {is_dark and "#212a35" or "#f0f3f5"}; color: #9aacb0; border-color: var(--sq-border); }}
+
+/* 시장 지표 */
+.sq-mkt-item {{
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid {mkt_border};
+}}
+.sq-mkt-name {{ font-size: 0.75rem; font-weight: 600; color: var(--sq-muted); }}
+.sq-mkt-val  {{ font-size: 0.78rem; font-weight: 700; }}
+
+/* Action Console 개선 */
+.sq-ac-wrap {{
+  background: {ac_bg}; border: 1px solid var(--sq-border);
+  border-radius: var(--sq-radius); box-shadow: var(--sq-shadow);
+  overflow: hidden; margin-bottom: 14px;
+}}
+.sq-ac-header {{
+  background: linear-gradient(135deg, #063d3d 0%, #0a5c5c 100%);
+  padding: 14px 20px; display: flex; align-items: center; gap: 10px;
+}}
+.sq-ac-title {{ font-size: 1rem; font-weight: 700; color: #fff; letter-spacing: -0.01em; }}
+.sq-ac-badge {{
+  font-size: 0.72rem; background: rgba(255,255,255,0.15); color: #b8ffd4;
+  padding: 2px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.2);
+}}
+.sq-ac-llm {{
+  padding: 10px 20px; background: rgba(10,92,92,0.05);
+  border-bottom: 1px solid {ac_block_border};
+  font-family: monospace; font-size: 0.78rem; color: #0a5c5c;
+}}
+.sq-ac-body {{ display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; }}
+.sq-ac-block {{
+  padding: 18px 20px; border-right: 1px solid {ac_block_border};
+}}
+.sq-ac-block:last-child {{ border-right: none; }}
+.sq-lbl {{
+  font-size: 0.72rem; font-weight: 700; color: var(--sq-muted);
+  text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;
+}}
+.sq-ac-text {{ font-size: 0.95rem; color: var(--sq-text); line-height: 1.65; }}
+
+/* 우측 배너 */
+.sq-rail-section {{ margin-bottom: 14px; }}
+.sq-rail-title {{
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--sq-muted); margin-bottom: 8px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--sq-border);
+}}
+
+/* 계산 지표 */
+.sq-ind-row {{
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--sq-border);
+}}
+.sq-ind-name {{ font-size: 0.78rem; color: var(--sq-muted); }}
+.sq-ind-val  {{ font-size: 1.05rem; font-weight: 700; }}
+
+/* 엔진 뷰 */
+.sq-eng-section {{
+  background: {ac_bg}; border: 1px solid var(--sq-border);
+  border-radius: var(--sq-radius); box-shadow: var(--sq-shadow);
+  padding: 22px 24px; margin-bottom: 16px;
+}}
+.sq-eng-section-title {{
+  font-size: 0.82rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--sq-muted); margin-bottom: 16px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--sq-border);
+}}
+/* 파이프라인 */
+.sq-pipe-row {{
+  display: flex; align-items: center; gap: 0;
+  flex-wrap: wrap; margin: 8px 0;
+}}
+.sq-pipe-step {{
+  background: {is_dark and "#1a2d30" or "#f0f7f5"}; border: 1.5px solid #0a5c5c;
+  border-radius: 10px; padding: 10px 18px;
+  font-size: 0.82rem; font-weight: 600; color: {is_dark and "#b8ffd4" or "#063d3d"};
+  min-width: 110px; text-align: center;
+  animation: pipeIn 0.4s ease forwards;
+  opacity: 0; transform: translateY(8px);
+}}
+.sq-pipe-step.s1{{animation-delay:0.0s}}
+.sq-pipe-step.s2{{animation-delay:0.15s}}
+.sq-pipe-step.s3{{animation-delay:0.30s}}
+.sq-pipe-step.s4{{animation-delay:0.45s}}
+@keyframes pipeIn {{
+  to {{ opacity: 1; transform: translateY(0); }}
+}}
+.sq-pipe-arrow {{
+  color: #0a5c5c; font-size: 1.2rem; padding: 0 8px;
+  opacity: 0; animation: pipeIn 0.4s ease forwards;
+}}
+.sq-pipe-arrow.a1{{animation-delay:0.07s}}
+.sq-pipe-arrow.a2{{animation-delay:0.22s}}
+.sq-pipe-arrow.a3{{animation-delay:0.37s}}
+.sq-pipe-result {{
+  background: linear-gradient(135deg,#063d3d,#0a5c5c);
+  color: #b8ffd4 !important; border-color: transparent !important;
+}}
+/* 유사도 카드 */
+.sq-sim-card {{
+  background: {is_dark and "#212a35" or "#f7f9fb"}; border: 1.5px solid var(--sq-border);
+  border-radius: 12px; padding: 16px; text-align: center;
+  transition: all 0.2s;
+}}
+.sq-sim-card.best {{
+  background: rgba(10,92,92,0.1); border-color: #0a5c5c;
+}}
+.sq-sim-name {{ font-size: 0.82rem; font-weight: 700; color: var(--sq-text); margin-bottom: 8px; }}
+.sq-sim-pct  {{ font-size: 1.6rem; font-weight: 800; color: #0a5c5c; }}
+.sq-sim-bar  {{ height: 5px; background: var(--sq-border); border-radius: 999px; margin-top: 8px; overflow: hidden; }}
+.sq-sim-fill {{ height: 100%; border-radius: 999px; background: linear-gradient(90deg,#0a5c5c,#1dd1a1); }}
+/* 벡터 매트릭스 */
+.sq-vec-matrix {{ display: grid; grid-template-columns: repeat(6,1fr); gap: 4px; margin-bottom: 4px; }}
+.sq-vec-cell {{
+  aspect-ratio: 1; border-radius: 6px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px;
+  font-size: 0.6rem; color: var(--sq-muted); padding: 4px;
+}}
+.sq-vec-cell.v1 {{ background: rgba(10,92,92,0.25); color: {is_dark and "#b8ffd4" or "#063d3d"}; font-weight: 700; border: 1.5px solid rgba(10,92,92,0.4); }}
+.sq-vec-cell.v0 {{ background: {is_dark and "#1a2d30" or "#f0f3f5"}; border: 1px solid var(--sq-border); }}
+.sq-vec-bit {{ font-size: 0.82rem; font-weight: 800; }}
+/* 분석목적 카드 */
+.sq-goal-card {{
+  padding: 12px 14px; border-radius: 10px; border: 1.5px solid;
+  margin-bottom: 8px; display: flex; align-items: flex-start; gap: 10px;
+}}
+.sq-goal-card.on  {{ background: rgba(10,92,92,0.1); border-color: rgba(10,92,92,0.3); }}
+.sq-goal-card.off {{ background: {is_dark and "#212a35" or "#f7f9fb"}; border-color: var(--sq-border); opacity: 0.65; }}
+.sq-goal-dot {{ width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }}
+.sq-goal-dot.on  {{ background: #0a5c5c; }}
+.sq-goal-dot.off {{ background: #c5d5d0; }}
+.sq-goal-card-name {{ font-size: 0.88rem; font-weight: 700; color: var(--sq-text); }}
+.sq-goal-card-desc {{ font-size: 0.78rem; color: var(--sq-muted); margin-top: 2px; }}
+
+.sq-feed-scroll{{max-height:220px;overflow-y:auto;padding-right:4px}}
+.sq-feed-scroll::-webkit-scrollbar{{width:4px}}
+.sq-feed-scroll::-webkit-scrollbar-track{{background:transparent}}
+.sq-feed-scroll::-webkit-scrollbar-thumb{{background:#c5d5d0;border-radius:2px}}
+.sq-goal-chip{{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:0.75rem;font-weight:600;margin:3px 2px;border:1px solid}}
+.sq-goal-on{{background:rgba(10,92,92,0.1);color:#0a5c5c;border-color:rgba(10,92,92,0.25)}}
+.sq-goal-off{{background: {is_dark and "#212a35" or "#f0f3f5"};color:#9aacb0;border-color:var(--sq-border)}}
+.sq-mkt-item{{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid {mkt_border}}}
+.sq-mkt-name{{font-size:0.75rem;font-weight:600;color:var(--sq-muted)}}
+.sq-mkt-val{{font-size:0.82rem;font-weight:700}}
+.sq-ac-wrap{{background:{ac_bg};border:1px solid var(--sq-border);border-radius:var(--sq-radius);box-shadow:var(--sq-shadow);overflow:hidden;margin-bottom:14px}}
+.sq-ac-header{{background:linear-gradient(135deg,#063d3d 0%,#0a5c5c 100%);padding:14px 20px;display:flex;align-items:center;gap:10px}}
+.sq-ac-title{{font-size:1.05rem;font-weight:700;color:#fff;letter-spacing:-0.01em}}
+.sq-ac-badge{{font-size:0.72rem;background:rgba(255,255,255,0.15);color:#b8ffd4;padding:2px 10px;border-radius:999px;border:1px solid rgba(255,255,255,0.2)}}
+.sq-ac-llm{{padding:10px 20px;background:rgba(10,92,92,0.05);border-bottom:1px solid {ac_block_border};font-family:monospace;font-size:0.78rem;color:#0a5c5c}}
+.sq-ac-body{{display:grid;grid-template-columns:1fr 1fr 1fr 1fr}}
+.sq-ac-block{{padding:20px 20px;border-right:1px solid {ac_block_border}}}
+.sq-ac-block:last-child{{border-right:none}}
+.sq-ac-lbl{{font-size:0.72rem;font-weight:700;color:var(--sq-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px}}
+.sq-ac-text{{font-size:1.0rem;font-weight:600;color:var(--sq-text);line-height:1.65}}
+.sq-rail-section{{margin-bottom:4px}}
+.sq-rail-title{{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--sq-muted);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--sq-border)}}
+.sq-ind-row{{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--sq-border)}}
+.sq-ind-name{{font-size:0.82rem;color:var(--sq-muted)}}
+.sq-ind-val{{font-size:1.15rem;font-weight:700}}
+.sq-eng-section{{background:{ac_bg};border:1px solid var(--sq-border);border-radius:var(--sq-radius);box-shadow:var(--sq-shadow);padding:22px 24px;margin-bottom:16px}}
+.sq-eng-section-title{{font-size:0.82rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--sq-muted);margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--sq-border)}}
+.sq-pipe-row{{display:flex;align-items:center;flex-wrap:wrap;margin:8px 0}}
+.sq-pipe-step{{background:{is_dark and "#1a2d30" or "#f0f7f5"};border:1.5px solid #0a5c5c;border-radius:10px;padding:10px 18px;font-size:0.82rem;font-weight:600;color:{is_dark and "#b8ffd4" or "#063d3d"};min-width:110px;text-align:center;animation:pipeIn 0.4s ease forwards;opacity:0;transform:translateY(8px)}}
+.sq-pipe-step.s1{{animation-delay:0.0s}}.sq-pipe-step.s2{{animation-delay:0.15s}}.sq-pipe-step.s3{{animation-delay:0.3s}}.sq-pipe-step.s4{{animation-delay:0.45s}}
+@keyframes pipeIn{{to{{opacity:1;transform:translateY(0)}}}}
+.sq-pipe-arrow{{color:#0a5c5c;font-size:1.2rem;padding:0 8px;opacity:0;animation:pipeIn 0.4s ease forwards}}
+.sq-pipe-arrow.a1{{animation-delay:0.07s}}.sq-pipe-arrow.a2{{animation-delay:0.22s}}.sq-pipe-arrow.a3{{animation-delay:0.37s}}
+.sq-pipe-result{{background:linear-gradient(135deg,#063d3d,#0a5c5c);color:#b8ffd4 !important;border-color:transparent !important}}
+.sq-sim-card{{background:{is_dark and "#212a35" or "#f7f9fb"};border:1.5px solid var(--sq-border);border-radius:12px;padding:16px;text-align:center}}
+.sq-sim-card.best{{background:rgba(10,92,92,0.1);border-color:#0a5c5c}}
+.sq-sim-name{{font-size:0.82rem;font-weight:700;color:var(--sq-text);margin-bottom:8px}}
+.sq-sim-pct{{font-size:1.6rem;font-weight:800;color:#0a5c5c}}
+.sq-sim-bar{{height:5px;background:var(--sq-border);border-radius:999px;margin-top:8px;overflow:hidden}}
+.sq-sim-fill{{height:100%;border-radius:999px;background:linear-gradient(90deg,#0a5c5c,#1dd1a1)}}
+.sq-vec-matrix{{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin-bottom:4px}}
+.sq-vec-cell{{aspect-ratio:1;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:0.6rem;color:var(--sq-muted);padding:4px;border:1.5px solid var(--sq-border)}}
+.sq-vec-cell.v1{{background:rgba(10,92,92,0.25);color:{is_dark and "#b8ffd4" or "#063d3d"};font-weight:700;border-color:rgba(10,92,92,0.4)}}
+.sq-vec-cell.v0{{background:{is_dark and "#161b22" or "#ffffff"}}}
+.sq-vec-bit{{font-size:0.9rem;font-weight:800}}
+.sq-goal-card{{padding:12px 14px;border-radius:10px;border:1.5px solid;margin-bottom:8px;display:flex;align-items:flex-start;gap:10px}}
+.sq-goal-card.on{{background:rgba(10,92,92,0.1);border-color:rgba(10,92,92,0.3)}}
+.sq-goal-card.off{{background:{is_dark and "#212a35" or "#f7f9fb"};border-color:var(--sq-border);opacity:0.65}}
+.sq-goal-dot{{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}}
+.sq-goal-dot.on{{background:#0a5c5c}}.sq-goal-dot.off{{background:#c5d5d0}}
+.sq-goal-card-name{{font-size:0.88rem;font-weight:700;color:var(--sq-text)}}
+.sq-goal-card-desc{{font-size:0.78rem;color:var(--sq-muted);margin-top:2px}}
+</style>
+"""
+
+
+def ticker_tape_html(theme: str = "light") -> str:
+    """TradingView 상단 티커 테이프 위젯."""
+    import json
+    config = {
+        "symbols": [
+            {"proName": "FOREXCOM:SPX500", "title": "S&P 500"},
+            {"proName": "FOREXCOM:NSXUSD", "title": "Nasdaq 100"},
+            {"fx_id": "KRWUSD", "title": "USD/KRW"},
+            {"proName": "BITSTAMP:BTCUSD", "title": "BTC/USD"},
+            {"proName": "BITSTAMP:ETHUSD", "title": "ETH/USD"}
+        ],
+        "showSymbolLogo": True,
+        "colorTheme": theme,
+        "isTransparent": False,
+        "displayMode": "adaptive",
+        "locale": "ko"
+    }
+    return f"""
+<div class="tradingview-widget-container">
+  <div class="tradingview-widget-container__widget"></div>
+  <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+  {json.dumps(config)}
+  </script>
+</div>
+"""
+
+
+def technical_analysis_html(symbol: str = "NASDAQ:AAPL", theme: str = "light") -> str:
+    """TradingView Advanced Chart 위젯 (전체 차트)."""
+    import json
+    config = {
+        "autosize": True,
+        "symbol": symbol,
+        "interval": "D",
+        "timezone": "Asia/Seoul",
+        "theme": theme,
+        "style": "1",
+        "locale": "ko",
+        "toolbar_bg": "#f1f3f6" if theme == "light" else "#131722",
+        "enable_publishing": False,
+        "withdateranges": True,
+        "hide_side_toolbar": False,
+        "allow_symbol_change": True,
+        "container_id": "tradingview_advanced_chart"
+    }
+    return f"""
+<div class="tradingview-widget-container" style="height: 600px; width: 100%;">
+  <div id="tradingview_advanced_chart" style="height: 100%; width: 100%;"></div>
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+  <script type="text/javascript">
+  new TradingView.widget({json.dumps(config)});
+  </script>
+</div>
+"""
+
+
+def dimension_pills_html(dimension: str | None) -> str:
+    labs = ["1D", "2D", "ND"]
+    parts: list[str] = []
+    for lab in labs:
+        active = dimension is not None and lab == dimension
+        cls = "sq-dim-pill sq-dim-pill--active" if active else "sq-dim-pill sq-dim-pill--idle"
+        parts.append(f'<span class="{cls}">{html.escape(lab)}</span>')
+    label = '<p class="sq-nav-label" style="margin-top:0">Data Dimension</p>'
+    return f"{label}<div class=\"sq-dim-row\">{''.join(parts)}</div>"
+
+SIDEBAR_ICON_DASHBOARD = """
+<div class="sq-sb-nav-ic" title="대시보드">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M4 5h8v8H4V5zm12 0h4v4h-4V5zm0 6h4v8h-4v-8zM4 15h8v4H4v-4z" stroke="#0a5c5c" stroke-width="1.5" fill="rgba(10,92,92,0.12)" stroke-linejoin="round"/>
+</svg></div>
+"""
+
+SIDEBAR_ICON_HOME = """
+<div class="sq-sb-nav-ic" title="Home">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1V9.5z" stroke="#0a5c5c" stroke-width="1.5" fill="rgba(10,92,92,0.1)" stroke-linejoin="round"/>
+  <path d="M9 21V12h6v9" stroke="#0a5c5c" stroke-width="1.5" stroke-linecap="round"/>
+</svg></div>
+"""
+
+SIDEBAR_ICON_ENGINE = """
+<div class="sq-sb-nav-ic" title="분석 엔진">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="#0a5c5c" stroke-width="1.5" fill="rgba(10,92,92,0.1)"/>
+  <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00-.33 1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852 1 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="#0a5c5c" stroke-width="1.15" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg></div>
+"""
+
+SIDEBAR_BRAND_HTML = """
+<div class="sq-sb-brand">
+  <div class="sq-sb-logo-row">
+    <div class="sq-sb-logo-mark" aria-hidden="true"></div>
+    <div>
+      <div class="sq-sb-logo-text">FinRoute <span>AI</span></div>
+      <div class="sq-sb-logo-sub">Portfolio intelligence</div>
+    </div>
+  </div>
+</div>
+"""
+
+# 한국 주요 종목 코드 → 종목명 매핑
+
 THEME_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
@@ -209,6 +886,42 @@ SIDEBAR_BRAND_HTML = """
 </div>
 """
 
+_TICKER_NAME: dict[str, str] = {
+    "005930": "삼성전자",
+    "000660": "SK하이닉스",
+    "035420": "NAVER",
+    "005380": "현대차",
+    "051910": "LG화학",
+    "000270": "기아",
+    "068270": "셀트리온",
+    "207940": "삼성바이오로직스",
+    "006400": "삼성SDI",
+    "035720": "카카오",
+    "003550": "LG",
+    "028260": "삼성물산",
+    "066570": "LG전자",
+    "096770": "SK이노베이션",
+    "017670": "SK텔레콤",
+    "030200": "KT",
+    "055550": "신한지주",
+    "105560": "KB금융",
+    "086790": "하나금융지주",
+    "316140": "우리금융지주",
+    "032830": "삼성생명",
+    "003490": "대한항공",
+    "011200": "HMM",
+    "009150": "삼성전기",
+    "012330": "현대모비스",
+}
+
+
+def _ticker_to_name(ticker: str) -> str:
+    """ticker 코드를 종목명으로 변환. 매핑 없으면 ticker 그대로 반환."""
+    key = str(ticker).zfill(6) if str(ticker).isdigit() and len(str(ticker)) < 6 else str(ticker)
+    return _TICKER_NAME.get(key, key)
+
+
+
 def _find_col(df: pd.DataFrame, *cands: str) -> str | None:
     lower = {str(c).lower().replace(" ", "_"): c for c in df.columns}
     for cand in cands:
@@ -324,6 +1037,22 @@ def _kpi_defs(
             ("ATR (14)", fmt_num(ir.get("ATR"), 1), "변동성"),
             ("추세 (MA20 vs MA60)", ir.get("trend") or "—", "골든/데드"),
         ]
+    elif ct == "TimeSeries" and dim == "2D":
+        rows = [
+            ("공적분 p-value", fmt_num(ir.get("coint_p"), 3), "정상성"),
+            ("Z-score",        fmt_num(ir.get("zscore"),   2), "스프레드 편차"),
+            ("롤링 상관계수",   fmt_num(ir.get("roll_corr"), 2), "60일"),
+            ("헤지비율 β",      fmt_num(ir.get("beta"),     2), "회귀계수"),
+            ("반감기",          fmt_num(ir.get("halflife"),  1), "일"),
+        ]
+    elif ct == "TimeSeries" and dim == "ND":
+        rows = [
+            ("평균 상관계수", fmt_num(ir.get("avg_corr"),   2), "종목간 평균"),
+            ("PCA 1st PC",   fmt_pct(ir.get("pca_first")),     "설명력"),
+            ("VaR (95%)",    fmt_pct(ir.get("VaR")),           "일간 손실"),
+            ("최대 상관 쌍",  ir.get("max_corr_pair") or "—",  "종목 쌍"),
+            ("누적 수익률",   fmt_pct(ir.get("cum_return")),    "동일비중"),
+        ]
     elif ct == "Static" and dim == "2D":
         rows = [
             ("액티브 셰어", fmt_pct(ir.get("active_share")), "벤치 대비"),
@@ -383,8 +1112,68 @@ def _badge_color(val: str, name: str) -> str:
             if v > 60: return "#b54708"
             return "#1a7f37"
         except Exception: pass
+    # 2D
+    if "p-value" in nm or "coint" in nm:
+        try:
+            v = float(val)
+            if v < 0.05: return "#1a7f37"
+            if v < 0.10: return "#b54708"
+            return "#b42318"
+        except Exception: pass
+    if "z-score" in nm or "zscore" in nm:
+        try:
+            v = abs(float(val))
+            if v > 2: return "#b42318"
+            if v > 1: return "#b54708"
+            return "#1a7f37"
+        except Exception: pass
+    if "롤링 상관" in nm:
+        try:
+            v = float(val)
+            if v > 0.7: return "#1a7f37"
+            if v > 0.3: return "#b54708"
+            return "#b42318"
+        except Exception: pass
+    if "헤지" in nm or "β" in nm or "beta" in nm: return "#6b7280"
+    if "반감기" in nm or "halflife" in nm:
+        try:
+            v = float(val)
+            if v < 10: return "#1a7f37"
+            if v < 30: return "#b54708"
+            return "#b42318"
+        except Exception: pass
+    # ND
+    if "평균 상관" in nm:
+        try:
+            v = float(val)
+            if v > 0.7: return "#b42318"
+            if v > 0.4: return "#b54708"
+            return "#1a7f37"
+        except Exception: pass
+    if "pca" in nm:
+        try:
+            v = float(val.replace("%",""))
+            if v > 80: return "#b42318"
+            if v > 60: return "#b54708"
+            return "#1a7f37"
+        except Exception: pass
+    if "var" in nm:
+        try:
+            v = abs(float(val.replace("%","")))
+            if v > 3:   return "#b42318"
+            if v > 1.5: return "#b54708"
+            return "#1a7f37"
+        except Exception: pass
+    if "최대 상관" in nm: return "#6b7280"
+    if "누적" in nm or "수익률" in nm:
+        try:
+            v = float(val.replace("%","")) if "%" in val else float(val)*100
+            if v > 10: return "#1a7f37"
+            if v > 0:  return "#b54708"
+            return "#b42318"
+        except Exception: pass
     if "reduce" in s or "위험" in nm: return "#b42318"
-    if "buy" in s or "양호" in nm: return "#1a7f37"
+    if "buy"    in s or "양호" in nm: return "#1a7f37"
     return "#6b7280"
 
 def _hero_row_html(
@@ -551,41 +1340,488 @@ def _render_market(mkt_data: list) -> str:
         )
     return "".join(rows)
 
-def _render_home_charts(mkt_data: list) -> None:
-    if not mkt_data or not any(m.get("hist") for m in mkt_data):
-        st.info("시장 데이터를 불러오는 중... (yfinance 필요)")
-        return
+def _sparkline_svg(hist: list, up: bool, width: int = 80, height: int = 32) -> str:
+    """hist 값 리스트로 인라인 SVG 스파크라인 생성."""
+    if not hist or len(hist) < 2:
+        return ""
+    mn, mx = min(hist), max(hist)
+    rng = mx - mn or 1
+    pts = []
+    for i, v in enumerate(hist):
+        x = i / (len(hist) - 1) * width
+        y = height - ((v - mn) / rng * (height - 4) + 2)
+        pts.append(f"{x:.1f},{y:.1f}")
+    color = "#1dd1a1" if up else "#e74c3c"
+    fill_color = "rgba(29,209,161,0.15)" if up else "rgba(228,76,60,0.15)"
+    poly = " ".join(pts)
+    area_pts = f"0,{height} {poly} {width},{height}"
+    return (
+        f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
+        f'xmlns="http://www.w3.org/2000/svg" style="display:block">'
+        f'<polygon points="{area_pts}" fill="{fill_color}"/>'
+        f'<polyline points="{poly}" fill="none" stroke="{color}" '
+        f'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+        f'</svg>'
+    )
 
-    valid = [m for m in mkt_data if m.get("price") is not None and len(m.get("hist", [])) > 0]
-    if not valid:
-        st.warning("yfinance 설치 후 시장 지표를 확인할 수 있습니다.")
-        return
 
-    cols = st.columns(3)
-    for i, item in enumerate(valid[:6]):
-        col = cols[i % 3]
-        with col:
-            chg   = item["change"]
-            color = "#1a7f37" if chg >= 0 else "#b42318"
-            bg_fill = "rgba(26,127,55,0.08)" if chg >= 0 else "rgba(180,35,24,0.06)"
-            sign  = "+" if chg > 0 else ""
-            arrow = "▲" if chg >= 0 else "▼"
-            price_str = f"{item['price']:,.0f}" if item["name"] in ("KOSPI", "USD/KRW") else f"{item['price']:,.2f}"
-            hist = item.get("hist", [])
-            
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(y=hist, mode="lines", line=dict(color=color, width=2.5), fill="tozeroy", fillcolor=bg_fill, hoverinfo="skip"))
-            fig.add_annotation(x=0, y=1.15, xref="paper", yref="paper", text=f"<b>{item['name']}</b>", showarrow=False, font=dict(size=12, color="#7a8f94"), xanchor="left", yanchor="top")
-            fig.add_annotation(x=0, y=0.75, xref="paper", yref="paper", text=f"<b>{price_str}</b>", showarrow=False, font=dict(size=26, color=color, family="DM Sans"), xanchor="left", yanchor="top")
-            fig.add_annotation(x=0, y=0.45, xref="paper", yref="paper", text=f"{arrow} {sign}{chg:.2f}%", showarrow=False, font=dict(size=13, color=color, family="DM Sans"), xanchor="left", yanchor="top")
-            fig.update_layout(
-                height=140, margin=dict(l=20, r=0, t=20, b=0), 
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
-                showlegend=False, xaxis=dict(visible=False, fixedrange=True), 
-                yaxis=dict(visible=False, fixedrange=True, range=[min(hist)*0.99, max(hist)*1.05]), 
-                shapes=[dict(type="rect", xref="paper", yref="paper", x0=0, y0=0, x1=1, y1=1, line=dict(color="rgba(128,128,128,0.2)", width=1.5), fillcolor="rgba(0,0,0,0)", layer="below")]
+def _fig_ts_dual_line(df: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """TimeSeries 2D: 두 종목 정규화 라인 차트."""
+    is_dark = (theme == "dark")
+    bg  = "#1e252e" if is_dark else "#fafbfb"
+    txt = "#f0f7f5" if is_dark else "#1a2d30"
+    grd = "#313d4a" if is_dark else "#dde3e8"
+
+    date_c   = _find_col(df, "date", "datetime", "time")
+    ticker_c = _find_col(df, "ticker", "symbol", "code")
+    close_c  = _find_col(df, "close", "adj_close", "price")
+
+    fig = go.Figure()
+    if not (ticker_c and close_c):
+        fig.add_annotation(text="Ticker/Close 컬럼이 필요합니다",
+                           xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+        return fig
+
+    colors = ["#0a5c5c", "#1dd1a1"]
+    for i, ticker in enumerate(df[ticker_c].dropna().unique()[:2]):
+        sub = df[df[ticker_c] == ticker]
+        if date_c:
+            sub = sub.sort_values(date_c)
+        c = pd.to_numeric(sub[close_c], errors="coerce")
+        norm = c / c.iloc[0] * 100  # 100 기준 정규화
+        x = sub[date_c] if date_c else sub.index
+        fig.add_trace(go.Scatter(
+            x=x, y=norm, name=_ticker_to_name(str(ticker)),
+            line=dict(color=colors[i % len(colors)], width=2.5)
+        ))
+
+    fig.update_layout(
+        height=420, margin=dict(l=30, r=20, t=30, b=30),
+        paper_bgcolor=bg, plot_bgcolor=bg,
+        font=dict(family="DM Sans, sans-serif", color=txt),
+        xaxis=dict(gridcolor=grd), yaxis=dict(gridcolor=grd),
+        legend=dict(bgcolor="rgba(0,0,0,0)"),
+        yaxis_title="정규화 (시작=100)",
+    )
+    return fig
+
+
+def _fig_zscore(df: pd.DataFrame, indicator_result: dict, theme: str = "light") -> go.Figure:
+    """TimeSeries 2D 서브: Z-score 시계열."""
+    is_dark = (theme == "dark")
+    bg  = "#1e252e" if is_dark else "#fafbfb"
+    txt = "#f0f7f5" if is_dark else "#1a2d30"
+
+    ticker_c = _find_col(df, "ticker", "symbol", "code")
+    date_c   = _find_col(df, "date", "datetime", "time")
+    close_c  = _find_col(df, "close", "adj_close", "price")
+
+    fig = go.Figure()
+    if not (ticker_c and close_c):
+        return fig
+
+    tickers = df[ticker_c].dropna().unique()
+    if len(tickers) < 2:
+        return fig
+
+    t1, t2 = tickers[0], tickers[1]
+    def get_close(t):
+        sub = df[df[ticker_c] == t]
+        if date_c:
+            sub = sub.sort_values(date_c)
+        return pd.to_numeric(sub[close_c], errors="coerce").reset_index(drop=True),                (sub[date_c].reset_index(drop=True) if date_c else None)
+
+    c1, dates = get_close(t1)
+    c2, _     = get_close(t2)
+    beta = indicator_result.get("beta") or 1.0
+    spread = c1 - beta * c2
+    window = 60
+    s_mean = spread.rolling(window, min_periods=5).mean()
+    s_std  = spread.rolling(window, min_periods=5).std()
+    zscore = (spread - s_mean) / s_std.replace(0, np.nan)
+
+    x = dates if dates is not None else zscore.index
+    fig.add_trace(go.Scatter(x=x, y=zscore, name="Z-score",
+                             line=dict(color="#6a51a3", width=2)))
+    fig.add_hline(y=2,  line_dash="dot", line_color="#b54708")
+    fig.add_hline(y=-2, line_dash="dot", line_color="#1a7f37")
+    fig.add_hline(y=0,  line_dash="dash", line_color="#7a8f94", line_width=0.8)
+
+    fig.update_layout(
+        height=260, margin=dict(l=30, r=20, t=20, b=30),
+        paper_bgcolor=bg, plot_bgcolor=bg,
+        font=dict(family="DM Sans, sans-serif", color=txt),
+    )
+    return fig
+
+
+def _fig_rolling_corr(df: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """TimeSeries 2D 서브: 롤링 상관계수."""
+    is_dark = (theme == "dark")
+    bg  = "#1e252e" if is_dark else "#fafbfb"
+    txt = "#f0f7f5" if is_dark else "#1a2d30"
+    grd = "#313d4a" if is_dark else "#dde3e8"
+
+    ticker_c = _find_col(df, "ticker", "symbol", "code")
+    date_c   = _find_col(df, "date", "datetime", "time")
+    close_c  = _find_col(df, "close", "adj_close", "price")
+
+    fig = go.Figure()
+    if not (ticker_c and close_c):
+        return fig
+
+    tickers = df[ticker_c].dropna().unique()
+    if len(tickers) < 2:
+        return fig
+
+    def get_ret(t):
+        sub = df[df[ticker_c] == t]
+        if date_c:
+            sub = sub.sort_values(date_c)
+        c = pd.to_numeric(sub[close_c], errors="coerce").reset_index(drop=True)
+        return c.pct_change().dropna().reset_index(drop=True),                (sub[date_c].iloc[1:].reset_index(drop=True) if date_c else None)
+
+    r1, dates = get_ret(tickers[0])
+    r2, _     = get_ret(tickers[1])
+    min_len = min(len(r1), len(r2))
+    r1, r2  = r1.iloc[:min_len], r2.iloc[:min_len]
+    roll_corr = r1.rolling(60, min_periods=10).corr(r2)
+
+    x = dates.iloc[:min_len] if dates is not None else roll_corr.index
+    fig.add_trace(go.Scatter(x=x, y=roll_corr, name="Rolling Corr (60d)",
+                             line=dict(color="#0a5c5c", width=2)))
+    fig.add_hline(y=0.5, line_dash="dot", line_color="#b54708")
+
+    fig.update_layout(
+        height=260, margin=dict(l=30, r=20, t=20, b=30),
+        paper_bgcolor=bg, plot_bgcolor=bg,
+        font=dict(family="DM Sans, sans-serif", color=txt),
+        xaxis=dict(gridcolor=grd), yaxis=dict(gridcolor=grd, range=[-1, 1]),
+    )
+    return fig
+
+
+def _fig_corr_heatmap(df: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """TimeSeries ND: 상관계수 히트맵."""
+    is_dark = (theme == "dark")
+    bg  = "#1e252e" if is_dark else "#fafbfb"
+    txt = "#f0f7f5" if is_dark else "#1a2d30"
+    ticker_c = _find_col(df, "ticker", "symbol", "code")
+    date_c   = _find_col(df, "date", "datetime", "time")
+    close_c  = _find_col(df, "close", "adj_close", "price")
+    fig = go.Figure()
+    if not (ticker_c and close_c):
+        fig.add_annotation(text="Ticker/Close 컬럼이 필요합니다",
+                           xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+        return fig
+    ret_dict = {}
+    for t in df[ticker_c].dropna().unique():
+        sub = df[df[ticker_c] == t]
+        if date_c:
+            sub = sub.sort_values(date_c)
+        c = pd.to_numeric(sub[close_c], errors="coerce").reset_index(drop=True)
+        ret_dict[str(t)] = c.pct_change().dropna().reset_index(drop=True)
+    ret_df    = pd.DataFrame(ret_dict).dropna()
+    corr_mat  = ret_df.corr()
+    str_labels = [_ticker_to_name(str(l)) for l in corr_mat.columns]
+    fig.add_trace(go.Heatmap(
+        z=corr_mat.values,
+        x=str_labels, y=str_labels,
+        colorscale=[[0, "#e74c3c"], [0.5, "#f7f9fb"], [1, "#0a5c5c"]],
+        zmin=-1, zmax=1,
+        text=[[f"{v:.2f}" for v in row] for row in corr_mat.values],
+        texttemplate="%{text}",
+        textfont=dict(size=11),
+        showscale=True, xgap=2, ygap=2,
+    ))
+    fig.update_layout(
+        height=420, margin=dict(l=80, r=20, t=30, b=80),
+        paper_bgcolor=bg, plot_bgcolor=bg,
+        font=dict(family="DM Sans, sans-serif", color=txt),
+        xaxis=dict(type="category", tickfont=dict(size=10), tickangle=-30),
+        yaxis=dict(type="category", tickfont=dict(size=10), autorange="reversed"),
+    )
+    return fig
+def _fig_network(df: pd.DataFrame, indicator_result: dict, theme: str = "light") -> go.Figure:
+    """TimeSeries ND: 네트워크 그래프
+    - 상관계수 높을수록 노드가 가깝게 배치 (force-directed)
+    - Z-score |z| > 2 인 쌍 → 빨간 엣지 (페어트레이딩 진입 신호)
+    - 그 외 상관 > threshold 쌍 → 틸 엣지
+    - ticker 앞자리 0 복원 (e.g. 5380 → 005380)
+    """
+    is_dark  = (theme == "dark")
+    bg       = "#1e252e" if is_dark else "#fafbfb"
+    txt      = "#f0f7f5" if is_dark else "#1a2d30"
+    ticker_c = _find_col(df, "ticker", "symbol", "code")
+    close_c  = _find_col(df, "close", "adj_close", "price")
+    date_c   = _find_col(df, "date", "datetime", "time")
+
+    fig = go.Figure()
+    if not (ticker_c and close_c):
+        return fig
+
+    raw_tickers = [str(t) for t in df[ticker_c].dropna().unique()]
+    n = len(raw_tickers)
+    if n < 2:
+        return fig
+
+    display = {t: _ticker_to_name(t) for t in raw_tickers}
+
+    # 수익률 계산 + 최근 종가 수집
+    ret_dict     = {}
+    latest_price = {}
+    for t in raw_tickers:
+        sub = df[df[ticker_c].astype(str) == t]
+        if date_c:
+            sub = sub.sort_values(date_c)
+        c = pd.to_numeric(sub[close_c], errors="coerce").reset_index(drop=True)
+        latest_price[t] = float(c.iloc[-1]) if len(c) > 0 else 0.0
+        ret_dict[t]     = c.pct_change().dropna().reset_index(drop=True)
+
+    ret_df   = pd.DataFrame(ret_dict).dropna()
+    corr_mat = ret_df.corr()
+
+    # ── 쌍별 Z-score 계산 ──
+    # spread = close_t1 - beta * close_t2, Z = (spread - mean) / std (60일 롤링)
+    def pair_zscore(t1: str, t2: str) -> float:
+        sub1 = df[df[ticker_c].astype(str) == t1]
+        sub2 = df[df[ticker_c].astype(str) == t2]
+        if date_c:
+            sub1 = sub1.sort_values(date_c)
+            sub2 = sub2.sort_values(date_c)
+        c1 = pd.to_numeric(sub1[close_c], errors="coerce").reset_index(drop=True)
+        c2 = pd.to_numeric(sub2[close_c], errors="coerce").reset_index(drop=True)
+        min_len = min(len(c1), len(c2))
+        if min_len < 20:
+            return 0.0
+        c1, c2 = c1.iloc[:min_len], c2.iloc[:min_len]
+        r1 = c1.pct_change().dropna()
+        r2 = c2.pct_change().dropna()
+        min_r = min(len(r1), len(r2))
+        r1, r2 = r1.iloc[:min_r].values, r2.iloc[:min_r].values
+        denom = float(np.dot(r2 - r2.mean(), r2 - r2.mean())) + 1e-12
+        beta  = float(np.dot(r2 - r2.mean(), r1 - r1.mean())) / denom
+        spread = c1 - beta * c2
+        window = min(60, len(spread))
+        s_mean = spread.rolling(window, min_periods=10).mean().iloc[-1]
+        s_std  = spread.rolling(window, min_periods=10).std().iloc[-1]
+        if not s_std or s_std < 1e-10:
+            return 0.0
+        return float((spread.iloc[-1] - s_mean) / s_std)
+
+    # ── Force-directed 배치 (상관계수 기반) ──
+    # 초기: 원형 배치 → 반발/인력 시뮬레이션
+    pos = {}
+    for i, t in enumerate(raw_tickers):
+        a = 2 * np.pi * i / n
+        pos[t] = np.array([np.cos(a), np.sin(a)], dtype=float)
+
+    ITER      = 80
+    threshold = 0.5
+    for _ in range(ITER):
+        forces = {t: np.zeros(2) for t in raw_tickers}
+        for i, t1 in enumerate(raw_tickers):
+            for j, t2 in enumerate(raw_tickers):
+                if j <= i:
+                    continue
+                diff = pos[t1] - pos[t2]
+                dist = float(np.linalg.norm(diff)) + 1e-6
+                unit = diff / dist
+                try:
+                    corr_val = float(corr_mat.loc[t1, t2])
+                except KeyError:
+                    corr_val = 0.0
+                if not np.isfinite(corr_val):
+                    corr_val = 0.0
+                # 인력 (상관 높을수록 강하게 당김)
+                attract = corr_val * corr_val * 0.08
+                # 반발 (너무 가까워지지 않도록)
+                repulse = 0.03 / (dist * dist)
+                f = (-attract + repulse) * unit
+                forces[t1] += f
+                forces[t2] -= f
+        for t in raw_tickers:
+            pos[t] += forces[t] * 0.3
+        # 범위 클리핑
+        for t in raw_tickers:
+            pos[t] = np.clip(pos[t], -1.2, 1.2)
+
+    # ── 엣지 렌더링 ──
+    edge_count = 0
+    for i, t1 in enumerate(raw_tickers):
+        for j, t2 in enumerate(raw_tickers):
+            if j <= i:
+                continue
+            try:
+                corr_val = float(corr_mat.loc[t1, t2])
+            except KeyError:
+                continue
+            if not np.isfinite(corr_val) or abs(corr_val) <= threshold:
+                continue
+
+            z = pair_zscore(t1, t2)
+            # Z-score 임계치 초과 → 빨강 (페어트레이딩 진입 신호)
+            if abs(z) > 2:
+                color = "rgba(231,76,60,0.85)"
+                label = f"{display[t1]}↔{display[t2]}: corr={corr_val:.2f} | Z={z:.2f} 🔴진입신호"
+            else:
+                color = "rgba(10,92,92,0.75)"
+                label = f"{display[t1]}↔{display[t2]}: corr={corr_val:.2f} | Z={z:.2f}"
+
+            x0, y0 = pos[t1]
+            x1, y1 = pos[t2]
+            width  = max(1.5, abs(corr_val) * 6)
+            mx, my = (x0+x1)/2, (y0+y1)/2
+
+            fig.add_trace(go.Scatter(
+                x=[x0, mx, x1, None], y=[y0, my, y1, None],
+                mode="lines",
+                line=dict(color=color, width=width),
+                hoverinfo="text",
+                hovertext=[None, label, None, None],
+                showlegend=False, name="",
+            ))
+            edge_count += 1
+
+    if edge_count == 0:
+        fig.add_annotation(
+            text=f"상관계수 {threshold} 초과 쌍 없음",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font=dict(color=txt, size=12),
+        )
+
+    # ── 노드 렌더링 ──
+    centrality  = indicator_result.get("centrality") or {}
+    node_x      = [float(pos[t][0]) for t in raw_tickers]
+    node_y      = [float(pos[t][1]) for t in raw_tickers]
+    node_size   = [22 + centrality.get(t, 0) * 25 for t in raw_tickers]
+    node_labels = [display[t] for t in raw_tickers]
+    hover_texts = [
+        f"<b>{display[t]}</b><br>현재가: {latest_price.get(t,0):,.0f}<br>중심성: {centrality.get(t,0):.2f}"
+        for t in raw_tickers
+    ]
+
+    fig.add_trace(go.Scatter(
+        x=node_x, y=node_y, mode="markers+text",
+        marker=dict(size=node_size, color="#1dd1a1",
+                    line=dict(color="#0a5c5c", width=2.5), opacity=0.95),
+        text=node_labels, textposition="top center",
+        textfont=dict(color=txt, size=11),
+        hoverinfo="text", hovertext=hover_texts,
+        hoverlabel=dict(bgcolor="#063d3d", bordercolor="#1dd1a1",
+                        font=dict(color="#f4faf9", size=12)),
+        showlegend=False, name="",
+    ))
+
+    fig.update_layout(
+        height=360, margin=dict(l=20, r=20, t=30, b=20),
+        paper_bgcolor=bg, plot_bgcolor=bg,
+        xaxis=dict(visible=False, range=[-1.6, 1.6]),
+        yaxis=dict(visible=False, range=[-1.6, 1.6]),
+        showlegend=False, hovermode="closest",
+    )
+    return fig
+
+def _render_home_charts(mkt_data: list, theme: str = "light") -> None:
+    """홈 화면: 시장 지표 카드 + 카드 바로 아래 [선택] 버튼."""
+    if not mkt_data:
+        st.info("시장 데이터를 불러오는 중...")
+        return
+    is_dark = (theme == "dark")
+    if "selected_indices" not in st.session_state:
+        st.session_state.selected_indices = [m["name"] for m in mkt_data[:6]]
+    selected   = list(st.session_state.selected_indices)
+    MAX_SELECT = 6
+    bg_sel   = "#0a1a1a" if is_dark else "#eef7f4"
+    bg_idle  = "#1e222d" if is_dark else "#f7f9fb"
+    bd_sel   = "#0a5c5c"
+    bd_idle  = "#2a2e39" if is_dark else "#dde3e8"
+    tx_price = "#f4faf9" if is_dark else "#1a2d30"
+    tx_muted = "#7a8f94"
+    tx_sel   = "#1dd1a1"
+    st.markdown("""
+<style>
+.mkt-sel-btn .stButton > button {
+    height:26px!important;min-height:26px!important;
+    padding:0 12px!important;font-size:0.7rem!important;
+    font-weight:600!important;border-radius:999px!important;
+    transition:all 0.15s ease!important;width:auto!important;
+}
+.mkt-sel-btn.sel .stButton > button {
+    background:#0a5c5c!important;color:#ffffff!important;
+    border-color:#0a5c5c!important;
+}
+.mkt-sel-btn.idle .stButton > button {
+    background:transparent!important;color:#0a5c5c!important;
+    border:1.5px solid #0a5c5c!important;
+}
+</style>
+""", unsafe_allow_html=True)
+    if len(selected) >= MAX_SELECT:
+        st.markdown(
+            '<p style="font-size:0.78rem;color:#b54708;margin-bottom:8px">'
+            f"⚠ 최대 {MAX_SELECT}개까지 선택 가능합니다.</p>",
+            unsafe_allow_html=True,
+        )
+    rows = [mkt_data[i:i+3] for i in range(0, len(mkt_data), 3)]
+    for row in rows:
+        cols = st.columns(3, gap="small")
+        for col, item in zip(cols, row):
+            name   = item["name"]
+            price  = item.get("price")
+            chg    = item.get("change", 0.0)
+            hist   = item.get("hist", [])
+            up     = chg >= 0
+            is_sel = name in selected
+            safe   = name.replace(" ", "_").replace("/", "_")
+            price_str = (
+                f"{price:,.0f}" if name in ("KOSPI", "USD/KRW", "Nikkei 225")
+                else f"{price:,.2f}" if price is not None
+                else "—"
             )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            arrow     = "▲" if up else "▼"
+            chg_color = tx_sel if up else "#e74c3c"
+            nc        = tx_sel if is_sel else tx_muted
+            dot       = (
+                '<span style="width:8px;height:8px;border-radius:50%;background:#1dd1a1;'
+                'display:inline-block;margin-right:6px;flex-shrink:0"></span>'
+            ) if is_sel else ""
+            bg     = bg_sel if is_sel else bg_idle
+            border = f"2px solid {bd_sel}" if is_sel else f"1.5px solid {bd_idle}"
+            shadow = "0 0 16px rgba(10,92,92,0.22)" if is_sel else "none"
+            spark  = _sparkline_svg(hist, up)
+            with col:
+                st.markdown(
+                    f'<div style="background:{bg};border:{border};box-shadow:{shadow};'
+                    f'border-radius:14px;padding:16px 14px;display:flex;'
+                    f'flex-direction:column;gap:8px;margin-bottom:6px">'
+                    f'<div style="display:flex;align-items:center;justify-content:space-between">'
+                    f'<div style="display:flex;align-items:center">'
+                    f'{dot}'
+                    f'<span style="font-size:0.7rem;font-weight:700;letter-spacing:0.06em;'
+                    f'text-transform:uppercase;color:{nc}">{html.escape(name)}</span></div>'
+                    f'<span style="font-size:0.75rem;font-weight:700;color:{chg_color}">'
+                    f'{arrow} {abs(chg):.2f}%</span></div>'
+                    f'<div style="font-size:1.35rem;font-weight:700;color:{tx_price};'
+                    f'letter-spacing:-0.02em">{price_str}</div>'
+                    f'<div>{spark}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                btn_label = "✓ 선택됨" if is_sel else "+ 선택"
+                cls       = "sel" if is_sel else "idle"
+                st.markdown(f'<div class="mkt-sel-btn {cls}">', unsafe_allow_html=True)
+                clicked = st.button(btn_label, key=f"mkt_{safe}", use_container_width=False)
+                st.markdown("</div>", unsafe_allow_html=True)
+                if clicked:
+                    if name in selected:
+                        st.session_state.selected_indices = [n for n in selected if n != name]
+                    elif len(selected) < MAX_SELECT:
+                        st.session_state.selected_indices = selected + [name]
+                    st.rerun()
+
+
+
 def _calculate_trading_bias(df: pd.DataFrame) -> tuple[int, str, str]:
     """10개의 기술적 지표를 앙상블하여 Trading Bias(0~100%)와 라벨을 반환합니다."""
     if df is None or df.empty: return 50, "Neutral", "var(--sq-warn)"
@@ -712,6 +1948,7 @@ def build(
     insight_result: dict | None,
     df: pd.DataFrame | None,
     mkt_data: list | None = None,
+    theme: str = "light",
 ) -> None:
     mkt_data = mkt_data or []
 
@@ -728,7 +1965,7 @@ def build(
             unsafe_allow_html=True,
         )
         
-        _render_home_charts(mkt_data)
+        _render_home_charts(mkt_data, theme=theme)
 
                 # 3. 드래그 앤 드롭 업로드 영역 (CSS로 파일 업로더 자체에 점선 박스 씌우기)
         st.markdown("""
@@ -788,10 +2025,13 @@ def build(
 
     mc, rc = st.columns([74, 26], gap="medium")
 
+    selected_names = st.session_state.get("selected_indices", [m["name"] for m in mkt_data[:6]])
+    filtered_mkt   = [m for m in mkt_data if m["name"] in selected_names]
+
     with rc:
         st.markdown(
             '<div class="sq-rail" style="margin-bottom:10px"><div class="sq-rail-section"><div class="sq-rail-title">Market Indicators</div>'
-            + _render_market(mkt_data) + '</div></div>', unsafe_allow_html=True)
+            + _render_market(filtered_mkt) + '</div></div>', unsafe_allow_html=True)
 
         feed_items = ""
         if not events:
@@ -962,29 +2202,54 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
                     dot = _badge_color(str(val), name)
                     st.markdown(f'<div class="sq-card sq-kpi"><div class="sq-kpi__name">{html.escape(name)}</div><div class="sq-kpi__val">{html.escape(str(val))}</div><div class="sq-kpi__sub">{html.escape(sub)}</div><div class="sq-kpi__dot" style="color:{dot}">● 상태</div></div>', unsafe_allow_html=True)
 
-            main_id = chart_result.get("main_chart", "")
+            # 메인 차트 — class_type × dimension 분기
+            ct  = classify_result.get("class_type", "")
+            dim = classify_result.get("dimension", "1D")
             st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
-            if main_id == "candlestick": st.plotly_chart(_fig_candlestick(df), use_container_width=True)
-            elif main_id == "dual_line" and classify_result["class_type"] == "Static": st.plotly_chart(_fig_static_dual(df), use_container_width=True)
-            else: st.plotly_chart(_fig_candlestick(df), use_container_width=True)
+            if ct == "TimeSeries" and dim == "1D":
+                st.plotly_chart(_fig_candlestick(df), use_container_width=True)
+            elif ct == "TimeSeries" and dim == "2D":
+                st.plotly_chart(_fig_ts_dual_line(df), use_container_width=True)
+            elif ct == "TimeSeries" and dim == "ND":
+                st.plotly_chart(_fig_corr_heatmap(df), use_container_width=True)
+            elif ct == "Static":
+                st.plotly_chart(_fig_static_dual(df), use_container_width=True)
+            else:
+                st.plotly_chart(_fig_candlestick(df), use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # 서브 차트 — 식별자 기반 라우팅
             subs = chart_result.get("sub_charts") or []
+
+            def _render_sub(sub_id: str) -> None:
+                if sub_id == "rsi":
+                    st.plotly_chart(_fig_rsi(df), use_container_width=True)
+                elif sub_id == "zscore":
+                    st.plotly_chart(_fig_zscore(df, indicator_result), use_container_width=True)
+                elif sub_id == "rolling_corr":
+                    st.plotly_chart(_fig_rolling_corr(df), use_container_width=True)
+                elif sub_id == "network":
+                    st.plotly_chart(_fig_network(df, indicator_result), use_container_width=True)
+                elif sub_id == "excess_bar":
+                    st.plotly_chart(_fig_excess_bar(df), use_container_width=True)
+                elif sub_id == "weight_drift_bar":
+                    st.plotly_chart(_fig_weight_drift(df), use_container_width=True)
+                else:
+                    st.caption(f"서브 차트 준비 중: {sub_id}")
+
             if len(subs) >= 2:
                 s1, s2 = st.columns(2)
                 with s1:
                     st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
-                    if subs[0] == "rsi": st.plotly_chart(_fig_rsi(df), use_container_width=True)
-                    elif subs[0] == "excess_bar": st.plotly_chart(_fig_excess_bar(df), use_container_width=True)
+                    _render_sub(subs[0])
                     st.markdown('</div>', unsafe_allow_html=True)
                 with s2:
                     st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
-                    if subs[1] == "rolling_corr": st.caption("Rolling correlation (2D sample needed)")
-                    elif subs[1] == "weight_drift_bar": st.plotly_chart(_fig_weight_drift(df), use_container_width=True)
+                    _render_sub(subs[1])
                     st.markdown('</div>', unsafe_allow_html=True)
             elif len(subs) == 1:
                 st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
-                if subs[0] == "rsi": st.plotly_chart(_fig_rsi(df), use_container_width=True)
+                _render_sub(subs[0])
                 st.markdown('</div>', unsafe_allow_html=True)
 
             blocks = [("지금 할 행동", insight_result.get("action", "")), ("Why now?", insight_result.get("why_now", ""))]
