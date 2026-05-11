@@ -124,6 +124,10 @@ elif st.session_state.last_theme != current_theme:
     st.session_state.last_theme = current_theme
     st.rerun()
 
+if "show_ma" not in st.session_state: st.session_state.show_ma = True
+if "show_bb" not in st.session_state: st.session_state.show_bb = False
+if "show_vol" not in st.session_state: st.session_state.show_vol = True
+
 build(
     st.session_state.fin_view,
     classify_result, indicator_result, chart_result, insight_result,

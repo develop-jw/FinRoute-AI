@@ -43,10 +43,11 @@ def ticker_tape_html(theme: str = "light") -> str:
 """
 
 
-def _render_lightweight_chart(df: pd.DataFrame, theme: str = "light") -> None:
-    """CSV 데이터를 Lightweight Charts 형식으로 변환하여 렌더링."""
+def _render_lightweight_chart(df: pd.DataFrame, theme: str = "light", show_ma: bool = True, show_bb: bool = False, show_vol: bool = True) -> None:
+    """CSV 데이터를 Lightweight Charts 형식으로 변환하여 렌더링 (MA, 거래량 분리, 지표 토글)."""
     dc = _find_col(df, "date", "datetime")
     oc, hc, lc, cc = _find_col(df, "open"), _find_col(df, "high"), _find_col(df, "low"), _find_col(df, "close")
+    vc = _find_col(df, "volume")
     
     # 테마 설정
     is_dark = (theme == "dark")
@@ -59,25 +60,57 @@ def _render_lightweight_chart(df: pd.DataFrame, theme: str = "light") -> None:
     w[dc] = pd.to_datetime(w[dc]).dt.strftime('%Y-%m-%d')
     chart_data = w[[dc, oc, hc, lc, cc]].rename(columns={dc: 'time', oc: 'open', hc: 'high', lc: 'low', cc: 'close'})
     
+    # 기술적 지표 생성
+    series = [
+        {"type": 'Candlestick', "data": chart_data.to_dict('records'), "options": {
+            "upColor": "#2ed573", "downColor": "#e74c3c", "borderDownColor": "#e74c3c", 
+            "borderUpColor": "#2ed573", "wickDownColor": "#e74c3c", "wickUpColor": "#2ed573"
+        }}
+    ]
+
+    # MA20
+    if show_ma and len(w) >= 20:
+        w['ma20'] = pd.to_numeric(w[cc], errors="coerce").rolling(20).mean()
+        ma20_data = w[[dc, 'ma20']].dropna().rename(columns={dc: 'time', 'ma20': 'value'}).to_dict('records')
+        series.append({"type": 'Line', "data": ma20_data, "options": {"color": "#2962ff", "lineWidth": 2}})
+    
+    # 볼린저 밴드
+    if show_bb and len(w) >= 20:
+        ma = pd.to_numeric(w[cc], errors="coerce").rolling(20).mean()
+        std = pd.to_numeric(w[cc], errors="coerce").rolling(20).std()
+        w['bb_u'] = ma + (std * 2)
+        w['bb_l'] = ma - (std * 2)
+        bb_u = w[[dc, 'bb_u']].dropna().rename(columns={dc: 'time', 'bb_u': 'value'}).to_dict('records')
+        bb_l = w[[dc, 'bb_l']].dropna().rename(columns={dc: 'time', 'bb_l': 'value'}).to_dict('records')
+        series.append({"type": 'Line', "data": bb_u, "options": {"color": "rgba(255, 152, 0, 0.5)", "lineWidth": 1}})
+        series.append({"type": 'Line', "data": bb_l, "options": {"color": "rgba(255, 152, 0, 0.5)", "lineWidth": 1}})
+
+    # 거래량
+    if show_vol and vc:
+        volume_data = w[[dc, vc]].rename(columns={dc: 'time', vc: 'value'}).to_dict('records')
+        series.append({"type": 'Histogram', "data": volume_data, "options": {
+            "priceFormat": {"type": 'volume'}, "priceScaleId": 'volume', "color": "#0a5c5c"
+        }})
+    
     chart_options = {
         "layout": {"background": {"color": bg_color}, "textColor": text_color},
         "grid": {"vertLines": {"color": grid_color}, "horzLines": {"color": grid_color}},
         "crosshair": {"mode": 0},
-        "priceScale": {"borderColor": "#cccccc"},
+        "rightPriceScale": {
+            "visible": True,
+            "borderColor": "#cccccc",
+            "scaleMargins": {"top": 0.1, "bottom": 0.3} # 가격 차트 상단 10%, 하단 30% 마진
+        },
+        "overlayPriceScales": [
+            {
+                "id": "volume",
+                "scaleMargins": {"top": 0.7, "bottom": 0}, # 거래량 차트 상단 70% 여백 (즉, 하단 30% 영역 차지)
+                "borderColor": "transparent"
+            }
+        ]
     }
-    
-    series_options = {
-        "upColor": "#2ed573", "downColor": "#e74c3c",
-        "borderDownColor": "#e74c3c", "borderUpColor": "#2ed573",
-        "wickDownColor": "#e74c3c", "wickUpColor": "#2ed573",
-    }
-    
-    renderLightweightCharts([
-        {
-            "chart": chart_options,
-            "series": [{"type": 'Candlestick', "data": chart_data.to_dict('records'), "options": series_options}]
-        }
-    ], 'chart')
+
+    renderLightweightCharts([{"chart": chart_options, "series": series}], 'chart')
 
 # (이전 technical_analysis_html 함수는 유지하되 메인 차트에서는 사용하지 않음)
 
@@ -1646,9 +1679,18 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
             # 메인 차트 — class_type × dimension 분기
             ct  = classify_result.get("class_type", "")
             dim = classify_result.get("dimension", "1D")
+            
+            if ct == "TimeSeries" and dim == "1D":
+                st.checkbox("MA20", key="show_ma")
+                st.checkbox("Bollinger Bands", key="show_bb")
+                st.checkbox("Volume", key="show_vol")
+
             st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
             if ct == "TimeSeries" and dim == "1D":
-                _render_lightweight_chart(df, theme=theme)
+                _render_lightweight_chart(df, theme=theme,
+                    show_ma=st.session_state.show_ma,
+                    show_bb=st.session_state.show_bb,
+                    show_vol=st.session_state.show_vol)
             elif ct == "TimeSeries" and dim == "2D":
                 st.plotly_chart(_fig_ts_dual_line(df, theme=theme), use_container_width=True)
             elif ct == "TimeSeries" and dim == "ND":
