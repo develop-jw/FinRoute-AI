@@ -43,33 +43,44 @@ def ticker_tape_html(theme: str = "light") -> str:
 """
 
 
-def technical_analysis_html(symbol: str = "NASDAQ:AAPL", theme: str = "light") -> str:
-    """TradingView Advanced Chart 위젯 (전체 차트)."""
-    import json
-    config = {
-        "autosize": True,
-        "symbol": symbol,
-        "interval": "D",
-        "timezone": "Asia/Seoul",
-        "theme": theme,
-        "style": "1",
-        "locale": "ko",
-        "toolbar_bg": "#f1f3f6" if theme == "light" else "#131722",
-        "enable_publishing": False,
-        "withdateranges": True,
-        "hide_side_toolbar": False,
-        "allow_symbol_change": True,
-        "container_id": "tradingview_advanced_chart"
+def _render_lightweight_chart(df: pd.DataFrame, theme: str = "light") -> None:
+    """CSV 데이터를 Lightweight Charts 형식으로 변환하여 렌더링."""
+    dc = _find_col(df, "date", "datetime")
+    oc, hc, lc, cc = _find_col(df, "open"), _find_col(df, "high"), _find_col(df, "low"), _find_col(df, "close")
+    
+    # 테마 설정
+    is_dark = (theme == "dark")
+    bg_color = "#1e252e" if is_dark else "#ffffff"
+    text_color = "#f0f7f5" if is_dark else "#333333"
+    grid_color = "#313d4a" if is_dark else "#eeeeee"
+    
+    # 데이터 정리
+    w = df.copy()
+    w[dc] = pd.to_datetime(w[dc]).dt.strftime('%Y-%m-%d')
+    chart_data = w[[dc, oc, hc, lc, cc]].rename(columns={dc: 'time', oc: 'open', hc: 'high', lc: 'low', cc: 'close'})
+    
+    chart_options = {
+        "layout": {"background": {"color": bg_color}, "textColor": text_color},
+        "grid": {"vertLines": {"color": grid_color}, "horzLines": {"color": grid_color}},
+        "crosshair": {"mode": 0},
+        "priceScale": {"borderColor": "#cccccc"},
     }
-    return f"""
-<div class="tradingview-widget-container" style="height: 600px; width: 100%;">
-  <div id="tradingview_advanced_chart" style="height: 100%; width: 100%;"></div>
-  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script type="text/javascript">
-  new TradingView.widget({json.dumps(config)});
-  </script>
-</div>
-"""
+    
+    series_options = {
+        "upColor": "#2ed573", "downColor": "#e74c3c",
+        "borderDownColor": "#e74c3c", "borderUpColor": "#2ed573",
+        "wickDownColor": "#e74c3c", "wickUpColor": "#2ed573",
+    }
+    
+    renderLightweightCharts([
+        {
+            "chart": chart_options,
+            "series": [{"type": 'Candlestick', "data": chart_data.to_dict('records'), "options": series_options}]
+        }
+    ], 'chart')
+
+# (이전 technical_analysis_html 함수는 유지하되 메인 차트에서는 사용하지 않음)
+
 
 
 def dimension_pills_html(dimension: str | None) -> str:
@@ -1637,11 +1648,11 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
             dim = classify_result.get("dimension", "1D")
             st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
             if ct == "TimeSeries" and dim == "1D":
-                st.plotly_chart(_fig_candlestick(df), use_container_width=True)
+                _render_lightweight_chart(df, theme=theme)
             elif ct == "TimeSeries" and dim == "2D":
-                st.plotly_chart(_fig_ts_dual_line(df), use_container_width=True)
+                st.plotly_chart(_fig_ts_dual_line(df, theme=theme), use_container_width=True)
             elif ct == "TimeSeries" and dim == "ND":
-                st.plotly_chart(_fig_corr_heatmap(df), use_container_width=True)
+                st.plotly_chart(_fig_corr_heatmap(df, theme=theme), use_container_width=True)
             elif ct == "Static":
                 st.plotly_chart(_fig_static_dual(df), use_container_width=True)
             else:

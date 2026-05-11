@@ -117,8 +117,15 @@ if classify_result is not None and df is not None:
         st.caption(f"Loaded: **{fname}** · {len(df)} rows")
 
 mkt_data = _get_market_data()
+current_theme = st.get_option("theme.base") or "light"
+if "last_theme" not in st.session_state:
+    st.session_state.last_theme = current_theme
+elif st.session_state.last_theme != current_theme:
+    st.session_state.last_theme = current_theme
+    st.rerun()
+
 build(
     st.session_state.fin_view,
     classify_result, indicator_result, chart_result, insight_result,
-    df, mkt_data,
+    df, mkt_data, theme=current_theme,
 )
