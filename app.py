@@ -71,26 +71,33 @@ with st.sidebar:
     dim_section = st.empty()
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="sq-nav-label">CSV Upload</div>', unsafe_allow_html=True)
-    uploaded = st.file_uploader(
-        "Upload CSV", type="csv", key="sb_csv_upload", label_visibility="collapsed",
-    )
+    with st.expander("CSV Upload", expanded=True):
+        uploaded_files = st.file_uploader(
+            "Upload CSV", type="csv", key="sb_csv_upload", label_visibility="collapsed", accept_multiple_files=True,
+        )
 
-# ── 데이터 로드 ───────────────────────────────
-df: pd.DataFrame | None = None
-fname = ""
-
-# 1. 사이드바에서 새로 파일을 업로드한 경우
-if uploaded is not None:
-    df = pd.read_csv(uploaded)
-    fname = uploaded.name
-    # 사이드바에서 올려도 세션에 백업해두기 (안전장치)
-    st.session_state['saved_df'] = df 
-
-# 2. 홈 화면에서 업로드하여 세션에 백업된 데이터가 있는 경우
-elif 'saved_df' in st.session_state:
-    df = st.session_state['saved_df']
-    fname = "Uploaded_Data.csv" # 홈에서 올린 파일명 임시 처리
+    # ── 데이터 선택 ───────────────────────────────
+    if uploaded_files:
+        st.session_state['uploaded_files'] = uploaded_files
+    
+    if 'uploaded_files' in st.session_state and st.session_state['uploaded_files']:
+        file_names = [f.name for f in st.session_state['uploaded_files']]
+        selected_file = st.selectbox("Select File", file_names, key="sb_file_selector")
+        
+        # 선택된 파일 찾기
+        target_file = next(f for f in st.session_state['uploaded_files'] if f.name == selected_file)
+        df = pd.read_csv(target_file)
+        fname = target_file.name
+        st.session_state['saved_df'] = df
+        st.session_state['selected_fname'] = fname
+    
+    # 2. 파일이 선택되지 않았지만 기존 세션에 데이터가 있는 경우
+    elif 'saved_df' in st.session_state:
+        df = st.session_state['saved_df']
+        fname = st.session_state.get('selected_fname', "Uploaded_Data.csv")
+    else:
+        df = None
+        fname = ""
 
 # ── 메인 렌더 ─────────────────────────────────
 classify_result  = None
