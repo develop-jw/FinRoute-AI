@@ -1669,18 +1669,18 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
             ct  = classify_result.get("class_type", "")
             dim = classify_result.get("dimension", "1D")
             
-            if ct == "TimeSeries" and dim == "1D":
-                st.checkbox("MA20", key="show_ma")
-                st.checkbox("Bollinger Bands", key="show_bb")
+            if ct == "TimeSeries" and dim in ("1D", "2D"):
+                c1, c2 = st.columns(2)
+                with c1: st.checkbox("이동평균선 (MA20)", key="show_ma", value=True)
+                with c2: st.checkbox("볼린저 밴드 (BB)", key="show_bb", value=False)
 
             st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
-            if ct == "TimeSeries" and dim == "1D":
+            if ct == "TimeSeries" and dim in ("1D", "2D"):
+                # 1D/2D 모두 프리미엄 UI로 통일
                 _render_lightweight_chart(df, theme=theme,
                     show_ma=st.session_state.show_ma,
                     show_bb=st.session_state.show_bb,
-                    show_vol=True) # 토글 버튼 대신 항상 표시되도록 고정
-            elif ct == "TimeSeries" and dim == "2D":
-                st.plotly_chart(_fig_ts_dual_line(df, theme=theme), use_container_width=True)
+                    show_vol=True)
             elif ct == "TimeSeries" and dim == "ND":
                 st.plotly_chart(_fig_corr_heatmap(df, theme=theme), use_container_width=True)
             elif ct == "Static":
