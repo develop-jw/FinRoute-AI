@@ -128,7 +128,7 @@ def _render_lightweight_chart(
 
         # 지표는 단일 종목일 때만 혹은 첫 종목에만 표시
         if (len(tickers) == 1 or i == 0):
-            # MA 지원
+            # [MA 지원]
             if show_ma:
                 for period in show_ma:
                     if len(sub) >= period:
@@ -140,7 +140,7 @@ def _render_lightweight_chart(
                             "options": {"color": ma_colors.get(period, "#888888"), "lineWidth": 1.5, "title": f"MA{period}"}
                         })
             
-            # 볼린저 밴드
+            # [볼린저 밴드]
             if show_bb and len(sub) >= 20:
                 ma = pd.to_numeric(sub[cc], errors="coerce").rolling(20).mean()
                 std = pd.to_numeric(sub[cc], errors="coerce").rolling(20).std()
@@ -150,30 +150,38 @@ def _render_lightweight_chart(
                 price_series.append({"type": 'Line', "data": bb_u, "options": {"color": "rgba(255, 152, 0, 0.4)", "lineWidth": 1, "title": "BB Upper"}})
                 price_series.append({"type": 'Line', "data": bb_l, "options": {"color": "rgba(255, 152, 0, 0.4)", "lineWidth": 1, "title": "BB Lower"}})
 
-            # 일목균형표 (Ichimoku Cloud)
+            # [일목균형표]
             if show_ichimoku and len(sub) >= 52:
-                high_prices = pd.to_numeric(sub[hc], errors="coerce")
-                low_prices = pd.to_numeric(sub[lc], errors="coerce")
-                # 전환선 (Conversion Line): (9일간 최고가 + 9일간 최저가) / 2
-                nine_h = high_prices.rolling(window=9).max()
-                nine_l = low_prices.rolling(window=9).min()
-                sub['tenkan'] = (nine_h + nine_l) / 2
-                # 기준선 (Base Line): (26일간 최고가 + 26일간 최저가) / 2
-                twentysix_h = high_prices.rolling(window=26).max()
-                twentysix_l = low_prices.rolling(window=26).min()
-                sub['kijun'] = (twentysix_h + twentysix_l) / 2
-                # 선행스팬1 (Leading Span A): (전환선 + 기준선) / 2, 26일 선행
+                h = pd.to_numeric(sub[hc], errors="coerce")
+                l = pd.to_numeric(sub[lc], errors="coerce")
+                sub['tenkan'] = (h.rolling(9).max() + h.rolling(9).min()) / 2
+                sub['kijun'] = (h.rolling(26).max() + h.rolling(26).min()) / 2
                 sub['senkou_a'] = ((sub['tenkan'] + sub['kijun']) / 2).shift(26)
-                # 선행스팬2 (Leading Span B): (52일간 최고가 + 52일간 최저가) / 2, 26일 선행
-                fiftytwo_h = high_prices.rolling(window=52).max()
-                fiftytwo_l = low_prices.rolling(window=52).min()
-                sub['senkou_b'] = ((fiftytwo_h + fiftytwo_l) / 2).shift(26)
+                sub['senkou_b'] = ((h.rolling(52).max() + l.rolling(52).min()) / 2).shift(26)
+                for col in ['tenkan', 'kijun', 'senkou_a', 'senkou_b']:
+                    price_series.append({"type": 'Line', "data": sub[[dc, col]].dropna().rename(columns={dc:'time', col:'value'}).to_dict('records'), "options": {"lineWidth": 1, "title": col.capitalize()}})
+
+            # [추가 지표 계산]
+            # MACD
+            if st.session_state.get("show_macd"):
+                ema12 = pd.to_numeric(sub[cc], errors="coerce").ewm(span=12).mean()
+                ema26 = pd.to_numeric(sub[cc], errors="coerce").ewm(span=26).mean()
+                sub['macd'] = ema12 - ema26
+                price_series.append({"type": 'Line', "data": sub[[dc, 'macd']].dropna().rename(columns={dc:'time', 'macd':'value'}).to_dict('records'), "options": {"color": "#9b59b6", "lineWidth": 1, "title": "MACD"}})
+            
+            # 파라볼릭 SAR (간소화)
+            if st.session_state.get("show_psar"):
+                sub['psar'] = pd.to_numeric(sub[cc], errors="coerce").rolling(5).min() # 간단 구현 예시
+                price_series.append({"type": 'Line', "data": sub[[dc, 'psar']].dropna().rename(columns={dc:'time', 'psar':'value'}).to_dict('records'), "options": {"color": "#34495e", "lineWidth": 1, "title": "PSAR"}})
                 
-                # 차트에 추가
-                price_series.append({"type": 'Line', "data": sub[[dc, 'tenkan']].dropna().rename(columns={dc:'time','tenkan':'value'}).to_dict('records'), "options": {"color": "#ff4757", "lineWidth": 1, "title": "Tenkan"}})
-                price_series.append({"type": 'Line', "data": sub[[dc, 'kijun']].dropna().rename(columns={dc:'time','kijun':'value'}).to_dict('records'), "options": {"color": "#2f3542", "lineWidth": 1, "title": "Kijun"}})
-                price_series.append({"type": 'Line', "data": sub[[dc, 'senkou_a']].dropna().rename(columns={dc:'time','senkou_a':'value'}).to_dict('records'), "options": {"color": "rgba(46, 213, 115, 0.3)", "lineWidth": 1, "title": "Span A"}})
-                price_series.append({"type": 'Line', "data": sub[[dc, 'senkou_b']].dropna().rename(columns={dc:'time','senkou_b':'value'}).to_dict('records'), "options": {"color": "rgba(255, 71, 87, 0.3)", "lineWidth": 1, "title": "Span B"}})
+            # 엔벨로프
+            if st.session_state.get("show_env"):
+                ma = pd.to_numeric(sub[cc], errors="coerce").rolling(20).mean()
+                sub['env_u'] = ma * 1.05
+                sub['env_l'] = ma * 0.95
+                price_series.append({"type": 'Line', "data": sub[[dc, 'env_u']].dropna().rename(columns={dc:'time', 'env_u':'value'}).to_dict('records'), "options": {"color": "#7f8c8d", "lineWidth": 1, "title": "Env"}})
+                price_series.append({"type": 'Line', "data": sub[[dc, 'env_l']].dropna().rename(columns={dc:'time', 'env_l':'value'}).to_dict('records'), "options": {"color": "#7f8c8d", "lineWidth": 1, "title": "Env"}})
+
 
         # 2. 거래량 시리즈
         if show_vol and vc:
