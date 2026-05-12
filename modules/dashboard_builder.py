@@ -1672,14 +1672,13 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
             if ct == "TimeSeries" and dim == "1D":
                 st.checkbox("MA20", key="show_ma")
                 st.checkbox("Bollinger Bands", key="show_bb")
-                st.checkbox("Volume", key="show_vol")
 
             st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
             if ct == "TimeSeries" and dim == "1D":
                 _render_lightweight_chart(df, theme=theme,
                     show_ma=st.session_state.show_ma,
                     show_bb=st.session_state.show_bb,
-                    show_vol=st.session_state.show_vol)
+                    show_vol=True) # 토글 버튼 대신 항상 표시되도록 고정
             elif ct == "TimeSeries" and dim == "2D":
                 st.plotly_chart(_fig_ts_dual_line(df, theme=theme), use_container_width=True)
             elif ct == "TimeSeries" and dim == "ND":
