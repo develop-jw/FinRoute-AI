@@ -1736,45 +1736,49 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
             ct  = classify_result.get("class_type", "")
             dim = classify_result.get("dimension", "1D")
             
-            if ct == "TimeSeries" and dim in ("1D", "2D", "ND"):
+            # 2D/ND인 경우 종목 선택 UI 추가
+            tick_col = _find_col(df, "ticker", "symbol", "code", "asset", "asset_name")
+            display_df = df
+            if tick_col and dim in ("2D", "ND"):
+                all_tickers = sorted(df[tick_col].unique())
+                
+                def _fmt(t):
+                    name = _ticker_to_name(t)
+                    return f"{name} ({t})" if name != str(t) else str(t)
+
+                selected = st.multiselect(
+                    "비교할 종목 선택", 
+                    all_tickers, 
+                    default=all_tickers, 
+                    key="selected_tickers",
+                    format_func=_fmt
+                )
+                display_df = df[df[tick_col].isin(selected)]
+                
+                # 단일 종목 선택 시에만 지표 UI 표시
+                if len(selected) == 1:
+                    c1, c2, c3 = st.columns([2, 1, 1])
+                    with c1: 
+                        st.multiselect("이동평균선 (MA)", [5, 20, 60, 120], default=[20, 60], key="ma_periods")
+                    with c2: st.checkbox("볼린저 밴드 (BB)", key="show_bb", value=False)
+                    with c3: st.checkbox("일목균형표 (Ichimoku)", key="show_ichimoku", value=False)
+            else:
+                # 1D 모드 등에서는 기본 지표 표시
                 c1, c2, c3 = st.columns([2, 1, 1])
                 with c1: 
-                    st.multiselect(
-                        "이동평균선 (MA)", 
-                        options=[5, 20, 60, 120], 
-                        default=[20, 60], 
-                        key="ma_periods"
-                    )
+                    st.multiselect("이동평균선 (MA)", [5, 20, 60, 120], default=[20, 60], key="ma_periods")
                 with c2: st.checkbox("볼린저 밴드 (BB)", key="show_bb", value=False)
                 with c3: st.checkbox("일목균형표 (Ichimoku)", key="show_ichimoku", value=False)
 
-                # 2D/ND인 경우 종목 선택 UI 추가
-                tick_col = _find_col(df, "ticker", "symbol", "code", "asset", "asset_name")
-                if tick_col and dim in ("2D", "ND"):
-                    all_tickers = sorted(df[tick_col].unique())
-                    
-                    def _fmt(t):
-                        name = _ticker_to_name(t)
-                        return f"{name} ({t})" if name != str(t) else str(t)
-
-                    st.multiselect(
-                        "비교할 종목 선택", 
-                        all_tickers, 
-                        default=all_tickers, 
-                        key="selected_tickers",
-                        format_func=_fmt
-                    )
-                    display_df = df[df[tick_col].isin(st.session_state.selected_tickers)]
-                else:
-                    display_df = df
-
             st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
             if ct == "TimeSeries" and dim in ("1D", "2D", "ND"):
-                # 1D/2D/ND 모두 프리미엄 UI로 통일
+                # 단일 종목일 때만 지표 활성화
+                is_single = (dim in ("2D", "ND") and len(st.session_state.get("selected_tickers", [])) == 1) or (dim == "1D")
+                
                 _render_lightweight_chart(display_df, theme=theme,
-                    show_ma=st.session_state.get("ma_periods", []),
-                    show_bb=st.session_state.show_bb,
-                    show_ichimoku=st.session_state.show_ichimoku,
+                    show_ma=st.session_state.get("ma_periods", []) if is_single else None,
+                    show_bb=st.session_state.show_bb if is_single else False,
+                    show_ichimoku=st.session_state.show_ichimoku if is_single else False,
                     show_vol=True)
                 
                 # ND인 경우 하단에 상관계수 히트맵 추가 (사용자 요청)
