@@ -1711,19 +1711,21 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
 
                 # 2D/ND인 경우 종목 선택 UI 추가
                 tick_col = _find_col(df, "ticker", "symbol", "code", "asset", "asset_name")
-                name_col = _find_col(df, "asset_name", "name", "asset")
                 if tick_col and dim in ("2D", "ND"):
-                    if name_col and name_col != tick_col:
-                        # ticker + name 조합 표시
-                        df['display_ticker'] = df[tick_col].astype(str) + " (" + df[name_col].astype(str) + ")"
-                        options = sorted(df['display_ticker'].unique())
-                        selected_display = st.multiselect("비교할 종목 선택", options, default=options, key="selected_tickers")
-                        selected_keys = [s.split(" (")[0] for s in selected_display]
-                        display_df = df[df[tick_col].astype(str).isin(selected_keys)]
-                    else:
-                        all_tickers = sorted(df[tick_col].unique())
-                        st.multiselect("비교할 종목 선택", all_tickers, default=all_tickers, key="selected_tickers")
-                        display_df = df[df[tick_col].isin(st.session_state.selected_tickers)]
+                    all_tickers = sorted(df[tick_col].unique())
+                    
+                    def _fmt(t):
+                        name = _ticker_to_name(t)
+                        return f"{name} ({t})" if name != str(t) else str(t)
+
+                    st.multiselect(
+                        "비교할 종목 선택", 
+                        all_tickers, 
+                        default=all_tickers, 
+                        key="selected_tickers",
+                        format_func=_fmt
+                    )
+                    display_df = df[df[tick_col].isin(st.session_state.selected_tickers)]
                 else:
                     display_df = df
 
