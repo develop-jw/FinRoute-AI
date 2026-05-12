@@ -71,26 +71,48 @@ with st.sidebar:
     dim_section = st.empty()
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="sq-nav-label">CSV Upload</div>', unsafe_allow_html=True)
-    uploaded = st.file_uploader(
-        "Upload CSV", type="csv", key="sb_csv_upload", label_visibility="collapsed",
-    )
+    with st.expander("CSV Upload", expanded=True):
+        uploaded_files = st.file_uploader(
+            "Upload CSV", type="csv", key="sb_csv_upload", label_visibility="collapsed", accept_multiple_files=True,
+        )
 
-# ── 데이터 로드 ───────────────────────────────
-df: pd.DataFrame | None = None
-fname = ""
+    # ── 데이터 선택 ───────────────────────────────
+    if uploaded_files:
+        st.session_state['uploaded_files'] = uploaded_files
+    
+    if 'uploaded_files' in st.session_state and st.session_state['uploaded_files']:
+        file_names = [f.name for f in st.session_state['uploaded_files']]
+        selected_file = st.selectbox("Select File", file_names, key="sb_file_selector")
+        
+        # 선택된 파일 찾기
+        target_file = next(f for f in st.session_state['uploaded_files'] if f.name == selected_file)
+        
+        # 파일이 변경되었는지 체크하여 종목 선택 세션 초기화
+        if st.session_state.get('selected_fname') != target_file.name:
+            if 'selected_tickers' in st.session_state: del st.session_state['selected_tickers']
+            if 'selected_names' in st.session_state: del st.session_state['selected_names']
 
-# 1. 사이드바에서 새로 파일을 업로드한 경우
-if uploaded is not None:
-    df = pd.read_csv(uploaded)
-    fname = uploaded.name
-    # 사이드바에서 올려도 세션에 백업해두기 (안전장치)
-    st.session_state['saved_df'] = df 
-
-# 2. 홈 화면에서 업로드하여 세션에 백업된 데이터가 있는 경우
-elif 'saved_df' in st.session_state:
-    df = st.session_state['saved_df']
-    fname = "Uploaded_Data.csv" # 홈에서 올린 파일명 임시 처리
+        try:
+            df = pd.read_csv(target_file)
+            fname = target_file.name
+            st.session_state['saved_df'] = df
+            st.session_state['selected_fname'] = fname
+        except pd.errors.EmptyDataError:
+            st.error(f"Error: The file '{selected_file}' is empty and contains no data.")
+            df = None
+            fname = ""
+        except Exception as e:
+            st.error(f"Error reading '{selected_file}': {e}")
+            df = None
+            fname = ""
+    
+    # 2. 파일이 선택되지 않았지만 기존 세션에 데이터가 있는 경우
+    elif 'saved_df' in st.session_state:
+        df = st.session_state['saved_df']
+        fname = st.session_state.get('selected_fname', "Uploaded_Data.csv")
+    else:
+        df = None
+        fname = ""
 
 # ── 메인 렌더 ─────────────────────────────────
 classify_result  = None
@@ -110,8 +132,19 @@ if classify_result is not None and df is not None:
         st.caption(f"Loaded: **{fname}** · {len(df)} rows")
 
 mkt_data = _get_market_data()
+current_theme = st.get_option("theme.base") or "light"
+if "last_theme" not in st.session_state:
+    st.session_state.last_theme = current_theme
+elif st.session_state.last_theme != current_theme:
+    st.session_state.last_theme = current_theme
+    st.rerun()
+
+if "show_ma" not in st.session_state: st.session_state.show_ma = True
+if "show_bb" not in st.session_state: st.session_state.show_bb = False
+if "show_vol" not in st.session_state: st.session_state.show_vol = True
+
 build(
     st.session_state.fin_view,
     classify_result, indicator_result, chart_result, insight_result,
-    df, mkt_data,
+    df, mkt_data, theme=current_theme,
 )

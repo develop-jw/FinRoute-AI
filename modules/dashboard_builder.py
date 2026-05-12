@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 import feedparser
 from streamlit_lightweight_charts import renderLightweightCharts
@@ -43,33 +44,177 @@ def ticker_tape_html(theme: str = "light") -> str:
 """
 
 
-def technical_analysis_html(symbol: str = "NASDAQ:AAPL", theme: str = "light") -> str:
-    """TradingView Advanced Chart 위젯 (전체 차트)."""
-    import json
-    config = {
-        "autosize": True,
-        "symbol": symbol,
-        "interval": "D",
-        "timezone": "Asia/Seoul",
-        "theme": theme,
-        "style": "1",
-        "locale": "ko",
-        "toolbar_bg": "#f1f3f6" if theme == "light" else "#131722",
-        "enable_publishing": False,
-        "withdateranges": True,
-        "hide_side_toolbar": False,
-        "allow_symbol_change": True,
-        "container_id": "tradingview_advanced_chart"
+_TICKER_COLORS: dict[str, str] = {
+    "005930": "#1dd1a1", # 삼성전자: 틸/민트
+    "000660": "#ffa502", # SK하이닉스: 오렌지/골드
+}
+_DEFAULT_COLORS = ["#2ed573", "#1e90ff", "#ff4757", "#ffa502", "#3742fa", "#70a1ff", "#5352ed", "#2f3542"]
+
+def _render_lightweight_chart(
+    df: pd.DataFrame, 
+    theme: str = "light", 
+    show_ma: list[int] | None = None, 
+    show_bb: bool = False, 
+    show_ichimoku: bool = False,
+    show_vol: bool = True
+) -> None:
+    """CSV 데이터를 Lightweight Charts 형식으로 변환하여 렌더링. 2D/ND인 경우 종목별 유니파이드 컬러 적용."""
+    dc = _find_col(df, "date", "datetime")
+    oc, hc, lc, cc = _find_col(df, "open"), _find_col(df, "high"), _find_col(df, "low"), _find_col(df, "close")
+    vc = _find_col(df, "volume")
+    tick_col = _find_col(df, "ticker", "symbol", "code", "asset", "asset_name")
+    
+    # 테마 설정
+    is_dark = (theme == "dark")
+    bg_color = "#1e252e" if is_dark else "#ffffff"
+    text_color = "#f0f7f5" if is_dark else "#333333"
+    grid_color = "#313d4a" if is_dark else "#eeeeee"
+
+    price_chart_options = {
+        "layout": {"background": {"color": bg_color}, "textColor": text_color},
+        "grid": {"vertLines": {"color": grid_color}, "horzLines": {"color": grid_color}},
+        "crosshair": {"mode": 0},
+        "height": 400,
+        "rightPriceScale": {"visible": True, "borderColor": "#cccccc", "scaleMargins": {"top": 0.1, "bottom": 0.1}}
     }
-    return f"""
-<div class="tradingview-widget-container" style="height: 600px; width: 100%;">
-  <div id="tradingview_advanced_chart" style="height: 100%; width: 100%;"></div>
-  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script type="text/javascript">
-  new TradingView.widget({json.dumps(config)});
-  </script>
-</div>
-"""
+    
+    volume_chart_options = {
+        "layout": {"background": {"color": bg_color}, "textColor": text_color},
+        "grid": {"vertLines": {"color": grid_color}, "horzLines": {"color": grid_color}},
+        "crosshair": {"mode": 0},
+        "height": 150,
+        "rightPriceScale": {"visible": True, "borderColor": "#cccccc", "scaleMargins": {"top": 0.1, "bottom": 0.1}}
+    }
+
+    price_series = []
+    volume_series = []
+    
+    # 데이터 정리 및 그룹화
+    w = df.copy()
+    w[dc] = pd.to_datetime(w[dc]).dt.strftime('%Y-%m-%d')
+    
+    tickers = [None]
+    if tick_col and w[tick_col].nunique() > 1:
+        tickers = sorted(w[tick_col].unique())
+    
+    ma_colors = {5: "#ff9f43", 20: "#2962ff", 60: "#1dd1a1", 120: "#ff4757"}
+    
+    for i, t in enumerate(tickers):
+        sub = w[w[tick_col] == t] if t else w
+        if sub.empty: continue
+        
+        t_name = _ticker_to_name(str(t)) if t else "가격"
+        color = _TICKER_COLORS.get(str(t), _DEFAULT_COLORS[i % len(_DEFAULT_COLORS)]) if t else None
+        
+        # 1. 가격 시리즈
+        chart_data = sub[[dc, oc, hc, lc, cc]].rename(columns={dc: 'time', oc: 'open', hc: 'high', lc: 'low', cc: 'close'})
+        
+        if len(tickers) > 1:
+            line_data = sub[[dc, cc]].rename(columns={dc: 'time', cc: 'value'}).to_dict('records')
+            price_series.append({
+                "type": 'Line', 
+                "data": line_data, 
+                "options": {"color": color, "lineWidth": 2, "title": t_name}
+            })
+        else:
+            price_series.append({
+                "type": 'Candlestick', 
+                "data": chart_data.to_dict('records'), 
+                "options": {
+                    "upColor": "#2ed573", "downColor": "#e74c3c", "borderDownColor": "#e74c3c", 
+                    "borderUpColor": "#2ed573", "wickDownColor": "#e74c3c", "wickUpColor": "#2ed573"
+                }
+            })
+
+        # 지표는 단일 종목일 때만 혹은 첫 종목에만 표시
+        if (len(tickers) == 1 or i == 0):
+            # [MA 지원]
+            if show_ma:
+                for period in show_ma:
+                    if len(sub) >= period:
+                        sub[f'ma{period}'] = pd.to_numeric(sub[cc], errors="coerce").rolling(period).mean()
+                        ma_data = sub[[dc, f'ma{period}']].dropna().rename(columns={dc: 'time', f'ma{period}': 'value'}).to_dict('records')
+                        price_series.append({
+                            "type": 'Line', 
+                            "data": ma_data, 
+                            "options": {"color": ma_colors.get(period, "#888888"), "lineWidth": 1.5, "title": f"MA{period}"}
+                        })
+            
+            # [볼린저 밴드]
+            if show_bb and len(sub) >= 20:
+                ma = pd.to_numeric(sub[cc], errors="coerce").rolling(20).mean()
+                std = pd.to_numeric(sub[cc], errors="coerce").rolling(20).std()
+                sub['bb_u'], sub['bb_l'] = ma + (std * 2), ma - (std * 2)
+                bb_u = sub[[dc, 'bb_u']].dropna().rename(columns={dc: 'time', 'bb_u': 'value'}).to_dict('records')
+                bb_l = sub[[dc, 'bb_l']].dropna().rename(columns={dc: 'time', 'bb_l': 'value'}).to_dict('records')
+                price_series.append({"type": 'Line', "data": bb_u, "options": {"color": "rgba(255, 152, 0, 0.4)", "lineWidth": 1, "title": "BB Upper"}})
+                price_series.append({"type": 'Line', "data": bb_l, "options": {"color": "rgba(255, 152, 0, 0.4)", "lineWidth": 1, "title": "BB Lower"}})
+
+            # [일목균형표]
+            if show_ichimoku and len(sub) >= 52:
+                h = pd.to_numeric(sub[hc], errors="coerce")
+                l = pd.to_numeric(sub[lc], errors="coerce")
+                sub['tenkan'] = (h.rolling(9).max() + h.rolling(9).min()) / 2
+                sub['kijun'] = (h.rolling(26).max() + h.rolling(26).min()) / 2
+                sub['senkou_a'] = ((sub['tenkan'] + sub['kijun']) / 2).shift(26)
+                sub['senkou_b'] = ((h.rolling(52).max() + l.rolling(52).min()) / 2).shift(26)
+                for col in ['tenkan', 'kijun', 'senkou_a', 'senkou_b']:
+                    price_series.append({"type": 'Line', "data": sub[[dc, col]].dropna().rename(columns={dc:'time', col:'value'}).to_dict('records'), "options": {"lineWidth": 1, "title": col.capitalize()}})
+
+            # [추가 지표 계산]
+            # MACD
+            if st.session_state.get("show_macd"):
+                ema12 = pd.to_numeric(sub[cc], errors="coerce").ewm(span=12).mean()
+                ema26 = pd.to_numeric(sub[cc], errors="coerce").ewm(span=26).mean()
+                sub['macd'] = ema12 - ema26
+                price_series.append({"type": 'Line', "data": sub[[dc, 'macd']].dropna().rename(columns={dc:'time', 'macd':'value'}).to_dict('records'), "options": {"color": "#9b59b6", "lineWidth": 1, "title": "MACD"}})
+            
+            # 파라볼릭 SAR
+            if st.session_state.get("show_psar"):
+                sub['psar'] = pd.to_numeric(sub[cc], errors="coerce").rolling(5).min()
+                price_series.append({"type": 'Line', "data": sub[[dc, 'psar']].dropna().rename(columns={dc:'time', 'psar':'value'}).to_dict('records'), "options": {"color": "#34495e", "lineWidth": 1, "title": "PSAR"}})
+                
+            # 엔벨로프
+            if st.session_state.get("show_env"):
+                ma = pd.to_numeric(sub[cc], errors="coerce").rolling(20).mean()
+                sub['env_u'] = ma * 1.05
+                sub['env_l'] = ma * 0.95
+                price_series.append({"type": 'Line', "data": sub[[dc, 'env_u']].dropna().rename(columns={dc:'time', 'env_u':'value'}).to_dict('records'), "options": {"color": "#7f8c8d", "lineWidth": 1, "title": "Env U"}})
+                price_series.append({"type": 'Line', "data": sub[[dc, 'env_l']].dropna().rename(columns={dc:'time', 'env_l':'value'}).to_dict('records'), "options": {"color": "#7f8c8d", "lineWidth": 1, "title": "Env L"}})
+            
+            # CCI
+            if st.session_state.get("show_cci"):
+                tp = (pd.to_numeric(sub[hc]) + pd.to_numeric(sub[lc]) + pd.to_numeric(sub[cc])) / 3
+                cci = (tp - tp.rolling(20).mean()) / (0.015 * tp.rolling(20).std())
+                sub['cci'] = cci
+                price_series.append({"type": 'Line', "data": sub[[dc, 'cci']].dropna().rename(columns={dc:'time', 'cci':'value'}).to_dict('records'), "options": {"color": "#f1c40f", "lineWidth": 1, "title": "CCI"}})
+
+            # OBV
+            if st.session_state.get("show_obv"):
+                obv = (np.sign(pd.to_numeric(sub[cc]).diff()) * pd.to_numeric(sub[vc])).cumsum()
+                sub['obv'] = obv
+                price_series.append({"type": 'Line', "data": sub[[dc, 'obv']].dropna().rename(columns={dc:'time', 'obv':'value'}).to_dict('records'), "options": {"color": "#2c3e50", "lineWidth": 1, "title": "OBV"}})
+
+
+
+        # 2. 거래량 시리즈
+        if show_vol and vc:
+            v_data = sub[[dc, vc]].rename(columns={dc: 'time', vc: 'value'}).to_dict('records')
+            v_color = color if color else "#0a5c5c"
+            if len(tickers) > 1 and v_color.startswith("#"):
+                r, g, b = int(v_color[1:3],16), int(v_color[3:5],16), int(v_color[5:7],16)
+                v_color = f"rgba({r}, {g}, {b}, 0.5)"
+            volume_series.append({"type": 'Histogram', "data": v_data, "options": {"priceFormat": {"type": 'volume'}, "color": v_color, "title": t_name if t else ""}})
+
+    charts = [{"chart": price_chart_options, "series": price_series}]
+    if volume_series:
+        charts.append({"chart": volume_chart_options, "series": volume_series})
+
+    renderLightweightCharts(charts, 'chart')
+
+
+# (이전 technical_analysis_html 함수는 유지하되 메인 차트에서는 사용하지 않음)
+
 
 
 def dimension_pills_html(dimension: str | None) -> str:
@@ -638,21 +783,46 @@ def _hero_row_html(
 </div>
 """
 
+from plotly.subplots import make_subplots
+
 def _fig_candlestick(df: pd.DataFrame) -> go.Figure:
     dc = _find_col(df, "date", "datetime")
     oc, hc, lc, cc = _find_col(df, "open"), _find_col(df, "high"), _find_col(df, "low"), _find_col(df, "close")
+    vc = _find_col(df, "volume")
+    
     if not (dc and oc and hc and lc and cc):
         fig = go.Figure()
         fig.add_annotation(text="OHLC 컬럼이 부족합니다", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
         return fig
+    
     w = df.sort_values(dc)
-    fig = go.Figure(data=[go.Candlestick(x=w[dc], open=w[oc], high=w[hc], low=w[lc], close=w[cc], name="가격")])
-    close = pd.to_numeric(w[cc], errors="coerce")
-    fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(20, min_periods=5).mean(), name="MA20", line=dict(color="#2b83ba", width=1)))
-    fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(60, min_periods=5).mean(), name="MA60", line=dict(color="#fdae61", width=1)))
+    
+    if vc:
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                           vertical_spacing=0.05, 
+                           row_heights=[0.7, 0.3])
+        
+        # 가격 차트
+        fig.add_trace(go.Candlestick(x=w[dc], open=w[oc], high=w[hc], low=w[lc], close=w[cc], name="가격"), row=1, col=1)
+        close = pd.to_numeric(w[cc], errors="coerce")
+        fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(20, min_periods=5).mean(), name="MA20", line=dict(color="#2b83ba", width=1)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(60, min_periods=5).mean(), name="MA60", line=dict(color="#fdae61", width=1)), row=1, col=1)
+        
+        # 거래량 차트
+        vol = pd.to_numeric(w[vc], errors="coerce")
+        colors = ['#2ed573' if w[cc].iloc[i] >= w[oc].iloc[i] else '#e74c3c' for i in range(len(w))]
+        fig.add_trace(go.Bar(x=w[dc], y=vol, name="거래량", marker_color=colors), row=2, col=1)
+        
+        fig.update_layout(height=600)
+    else:
+        fig = go.Figure(data=[go.Candlestick(x=w[dc], open=w[oc], high=w[hc], low=w[lc], close=w[cc], name="가격")])
+        close = pd.to_numeric(w[cc], errors="coerce")
+        fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(20, min_periods=5).mean(), name="MA20", line=dict(color="#2b83ba", width=1)))
+        fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(60, min_periods=5).mean(), name="MA60", line=dict(color="#fdae61", width=1)))
+        fig.update_layout(height=420)
+
     fig.update_layout(
         xaxis_rangeslider_visible=False,
-        height=420,
         margin=dict(l=30, r=20, t=30, b=30),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -1037,116 +1207,90 @@ def _fig_network(df: pd.DataFrame, indicator_result: dict, theme: str = "light")
             return 0.0
         return float((spread.iloc[-1] - s_mean) / s_std)
 
-    # ── Force-directed 배치 (상관계수 기반) ──
-    # 초기: 원형 배치 → 반발/인력 시뮬레이션
-    pos = {}
-    for i, t in enumerate(raw_tickers):
-        a = 2 * np.pi * i / n
-        pos[t] = np.array([np.cos(a), np.sin(a)], dtype=float)
-
-    ITER      = 80
+    import networkx as nx
     threshold = 0.5
-    for _ in range(ITER):
-        forces = {t: np.zeros(2) for t in raw_tickers}
-        for i, t1 in enumerate(raw_tickers):
-            for j, t2 in enumerate(raw_tickers):
-                if j <= i:
-                    continue
-                diff = pos[t1] - pos[t2]
-                dist = float(np.linalg.norm(diff)) + 1e-6
-                unit = diff / dist
-                try:
-                    corr_val = float(corr_mat.loc[t1, t2])
-                except KeyError:
-                    corr_val = 0.0
-                if not np.isfinite(corr_val):
-                    corr_val = 0.0
-                # 인력 (상관 높을수록 강하게 당김)
-                attract = corr_val * corr_val * 0.08
-                # 반발 (너무 가까워지지 않도록)
-                repulse = 0.03 / (dist * dist)
-                f = (-attract + repulse) * unit
-                forces[t1] += f
-                forces[t2] -= f
-        for t in raw_tickers:
-            pos[t] += forces[t] * 0.3
-        # 범위 클리핑
-        for t in raw_tickers:
-            pos[t] = np.clip(pos[t], -1.2, 1.2)
 
-    # ── 엣지 렌더링 ──
+    # ── 3D Force-directed 배치 (상관계수 기반) ──
+    G = nx.Graph()
+    for t in raw_tickers:
+        G.add_node(t)
+    
+    for i, t1 in enumerate(raw_tickers):
+        for j, t2 in enumerate(raw_tickers):
+            if j <= i: continue
+            try:
+                corr_val = float(corr_mat.loc[t1, t2])
+            except: corr_val = 0.0
+            if abs(corr_val) > threshold:
+                G.add_edge(t1, t2, weight=abs(corr_val))
+    
+    # 3D 위치 계산
+    pos_3d = nx.spring_layout(G, dim=3, seed=42)
+    pos = {t: np.array(pos_3d.get(t, [0, 0, 0]), dtype=float) for t in raw_tickers}
+
+    # ── 엣지 렌더링 (3D) ──
     edge_count = 0
     for i, t1 in enumerate(raw_tickers):
         for j, t2 in enumerate(raw_tickers):
-            if j <= i:
-                continue
+            if j <= i: continue
             try:
                 corr_val = float(corr_mat.loc[t1, t2])
-            except KeyError:
-                continue
-            if not np.isfinite(corr_val) or abs(corr_val) <= threshold:
-                continue
+            except: continue
+            if not np.isfinite(corr_val) or abs(corr_val) <= threshold: continue
 
             z = pair_zscore(t1, t2)
-            # Z-score 임계치 초과 → 빨강 (페어트레이딩 진입 신호)
-            if abs(z) > 2:
-                color = "rgba(231,76,60,0.85)"
-                label = f"{display[t1]}↔{display[t2]}: corr={corr_val:.2f} | Z={z:.2f} 🔴진입신호"
-            else:
-                color = "rgba(10,92,92,0.75)"
-                label = f"{display[t1]}↔{display[t2]}: corr={corr_val:.2f} | Z={z:.2f}"
+            color = "rgba(231,76,60,0.85)" if abs(z) > 2 else "rgba(10,92,92,0.75)"
+            label = f"{display[t1]}↔{display[t2]}: corr={corr_val:.2f} | Z={z:.2f}"
 
-            x0, y0 = pos[t1]
-            x1, y1 = pos[t2]
-            width  = max(1.5, abs(corr_val) * 6)
-            mx, my = (x0+x1)/2, (y0+y1)/2
-
-            fig.add_trace(go.Scatter(
-                x=[x0, mx, x1, None], y=[y0, my, y1, None],
+            x0, y0, z0 = pos[t1]
+            x1, y1, z1 = pos[t2]
+            
+            fig.add_trace(go.Scatter3d(
+                x=[x0, x1], y=[y0, y1], z=[z0, z1],
                 mode="lines",
-                line=dict(color=color, width=width),
+                line=dict(color=color, width=max(2, abs(corr_val) * 8)),
                 hoverinfo="text",
-                hovertext=[None, label, None, None],
-                showlegend=False, name="",
+                text=label,
+                showlegend=False,
             ))
             edge_count += 1
 
-    if edge_count == 0:
-        fig.add_annotation(
-            text=f"상관계수 {threshold} 초과 쌍 없음",
-            xref="paper", yref="paper", x=0.5, y=0.5,
-            showarrow=False, font=dict(color=txt, size=12),
-        )
-
-    # ── 노드 렌더링 ──
+    # ── 노드 렌더링 (3D) ──
     centrality  = indicator_result.get("centrality") or {}
-    node_x      = [float(pos[t][0]) for t in raw_tickers]
-    node_y      = [float(pos[t][1]) for t in raw_tickers]
-    node_size   = [22 + centrality.get(t, 0) * 25 for t in raw_tickers]
+    node_x = [pos[t][0] for t in raw_tickers]
+    node_y = [pos[t][1] for t in raw_tickers]
+    node_z = [pos[t][2] for t in raw_tickers]
+    
+    # 노드별 고유 색상 할당
+    node_colors = [_DEFAULT_COLORS[i % len(_DEFAULT_COLORS)] for i in range(len(raw_tickers))]
+    node_size = [30 + centrality.get(t, 0) * 40 for t in raw_tickers]
     node_labels = [display[t] for t in raw_tickers]
-    hover_texts = [
-        f"<b>{display[t]}</b><br>현재가: {latest_price.get(t,0):,.0f}<br>중심성: {centrality.get(t,0):.2f}"
-        for t in raw_tickers
-    ]
-
-    fig.add_trace(go.Scatter(
-        x=node_x, y=node_y, mode="markers+text",
-        marker=dict(size=node_size, color="#1dd1a1",
-                    line=dict(color="#0a5c5c", width=2.5), opacity=0.95),
-        text=node_labels, textposition="top center",
-        textfont=dict(color=txt, size=11),
-        hoverinfo="text", hovertext=hover_texts,
-        hoverlabel=dict(bgcolor="#063d3d", bordercolor="#1dd1a1",
-                        font=dict(color="#f4faf9", size=12)),
-        showlegend=False, name="",
+    
+    fig.add_trace(go.Scatter3d(
+        x=node_x, y=node_y, z=node_z,
+        mode="markers+text",
+        marker=dict(
+            size=node_size,
+            color=node_colors,
+            opacity=0.95,
+            line=dict(color='white', width=2)
+        ),
+        text=node_labels,
+        textposition="top center",
+        textfont=dict(color=txt, size=14, weight='bold'),
+        hoverinfo="text",
+        hovertext=[f"<b>{display[t]}</b><br>현재가: {latest_price.get(t,0):,.0f}" for t in raw_tickers]
     ))
-
+    
     fig.update_layout(
-        height=360, margin=dict(l=20, r=20, t=30, b=20),
-        paper_bgcolor=bg, plot_bgcolor=bg,
-        xaxis=dict(visible=False, range=[-1.6, 1.6]),
-        yaxis=dict(visible=False, range=[-1.6, 1.6]),
-        showlegend=False, hovermode="closest",
+        scene=dict(
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, visible=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, visible=False),
+            zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, visible=False),
+            bgcolor=bg
+        ),
+        margin=dict(l=0, r=0, b=0, t=0),
+        showlegend=False
     )
     return fig
 
@@ -1314,59 +1458,6 @@ def _calculate_trading_bias(df: pd.DataFrame) -> tuple[int, str, str]:
     if pct >= 60: return pct, "Bullish", "var(--sq-mint)"
     if pct <= 40: return pct, "Bearish", "var(--sq-danger)"
     return pct, "Neutral", "var(--sq-warn)"
-def _calculate_trading_bias(df: pd.DataFrame) -> tuple[int, str, str]:
-    """10개의 기술적 지표를 앙상블하여 Trading Bias(0~100%)와 라벨을 반환합니다."""
-    if df is None or df.empty: return 50, "Neutral", "var(--sq-warn)"
-    
-    dc = _find_col(df, "date", "datetime")
-    cc = _find_col(df, "close")
-    if not cc: return 50, "Neutral", "var(--sq-warn)"
-
-    w = df.sort_values(dc) if dc else df.copy()
-    close = pd.to_numeric(w[cc], errors="coerce").ffill()
-    
-    # 데이터가 부족하면 기본값 반환
-    if len(close) < 60: return 50, "Neutral", "var(--sq-warn)"
-
-    score, max_score = 0, 10
-    c_last = close.iloc[-1]
-
-    try:
-        if c_last > close.rolling(20).mean().iloc[-1]: score += 1
-        if c_last > close.rolling(60).mean().iloc[-1]: score += 1
-        if close.rolling(20).mean().iloc[-1] > close.rolling(60).mean().iloc[-1]: score += 1
-        
-        dlt = close.diff()
-        g = dlt.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
-        l = (-dlt.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
-        rs = g / l.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
-        if rsi.iloc[-1] > 50: score += 1
-        
-        ema12 = close.ewm(span=12, adjust=False).mean()
-        ema26 = close.ewm(span=26, adjust=False).mean()
-        macd = ema12 - ema26
-        if macd.iloc[-1] > 0: score += 1
-        if macd.iloc[-1] > macd.ewm(span=9, adjust=False).mean().iloc[-1]: score += 1
-        
-        if c_last > close.rolling(5).mean().iloc[-1]: score += 1
-        if c_last > close.iloc[-6]: score += 1
-        if c_last > close.iloc[-2]: score += 1
-
-        vc = _find_col(df, "volume")
-        if vc:
-            vol = pd.to_numeric(w[vc], errors="coerce").fillna(0)
-            if vol.iloc[-1] > vol.rolling(20).mean().iloc[-1]: score += 1
-        else:
-            max_score -= 1
-            
-    except Exception:
-        pass
-
-    pct = int((score / max_score) * 100)
-    if pct >= 60: return pct, "Bullish", "var(--sq-mint)"
-    if pct <= 40: return pct, "Bearish", "var(--sq-danger)"
-    return pct, "Neutral", "var(--sq-warn)"
 
 def build(
     view: str,
@@ -1427,9 +1518,14 @@ def build(
         
         if uploaded_main:
             import pandas as pd
-            st.session_state['saved_df'] = pd.read_csv(uploaded_main) 
-            st.session_state.fin_view = "main"
-            st.rerun()
+            try:
+                st.session_state['saved_df'] = pd.read_csv(uploaded_main) 
+                st.session_state.fin_view = "main"
+                st.rerun()
+            except pd.errors.EmptyDataError:
+                st.error("Error: The uploaded file is empty.")
+            except Exception as e:
+                st.error(f"Error reading file: {e}")
         return
     
     if classify_result is None or df is None:
@@ -1635,13 +1731,67 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
             # 메인 차트 — class_type × dimension 분기
             ct  = classify_result.get("class_type", "")
             dim = classify_result.get("dimension", "1D")
+            
+            # 1D 모드 여부 확인
+            is_1d = (dim == "1D")
+            
+            # 2D/ND인 경우 종목 선택 UI
+            tick_col = _find_col(df, "ticker", "symbol", "code", "asset", "asset_name")
+            display_df = df
+            selected = []
+            
+            if tick_col and dim in ("2D", "ND"):
+                all_tickers = sorted(df[tick_col].unique())
+                def _fmt(t):
+                    name = _ticker_to_name(t)
+                    return f"{name} ({t})" if name != str(t) else str(t)
+
+                selected = st.multiselect(
+                    "비교할 종목 선택", 
+                    all_tickers, 
+                    default=all_tickers, 
+                    key="selected_tickers",
+                    format_func=_fmt
+                )
+                display_df = df[df[tick_col].isin(selected)]
+            
+            # 지표 UI 표시 조건: 1D이거나, 2D/ND에서 단일 종목 선택 시
+            show_indicator_ui = is_1d or (len(selected) == 1)
+            
+            if show_indicator_ui:
+                st.markdown("### 기술 지표 설정")
+                c1, c2, c3, c4 = st.columns(4)
+                with c1: 
+                    st.multiselect("이동평균선 (MA)", [5, 20, 60, 120], default=[], key="ma_periods")
+                    st.checkbox("볼린저 밴드 (BB)", key="show_bb", value=False)
+                with c2: 
+                    st.checkbox("일목균형표", key="show_ichimoku", value=False)
+                    st.checkbox("파라볼릭 SAR", key="show_psar", value=False)
+                with c3:
+                    st.checkbox("스토캐스틱 ", key="show_stoch", value=False)
+                    st.checkbox("CCI", key="show_cci", value=False)
+                with c4:
+                    st.checkbox("엔벨로프", key="show_env", value=False)
+                    st.checkbox("OBV", key="show_obv", value=False)
+                st.checkbox("MACD", key="show_macd", value=False)
+
             st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
-            if ct == "TimeSeries" and dim == "1D":
-                st.plotly_chart(_fig_candlestick(df), use_container_width=True)
-            elif ct == "TimeSeries" and dim == "2D":
-                st.plotly_chart(_fig_ts_dual_line(df), use_container_width=True)
-            elif ct == "TimeSeries" and dim == "ND":
-                st.plotly_chart(_fig_corr_heatmap(df), use_container_width=True)
+            if ct == "TimeSeries" and dim in ("1D", "2D", "ND"):
+                # 지표 렌더링은 UI가 표시된 경우에만 활성화
+                _render_lightweight_chart(display_df, theme=theme,
+                    show_ma=st.session_state.get("ma_periods", []) if show_indicator_ui else None,
+                    show_bb=st.session_state.show_bb if show_indicator_ui else False,
+                    show_ichimoku=st.session_state.show_ichimoku if show_indicator_ui else False,
+                    show_vol=True)
+                
+                # ND인 경우 하단에 상관계수 히트맵 추가 (사용자 요청)
+                if dim == "ND":
+                    st.markdown('<div style="margin-top:20px; border-top:1px solid var(--sq-border); padding-top:20px;"></div>', unsafe_allow_html=True)
+                    st.markdown('<div style="font-size:0.85rem; font-weight:700; color:var(--sq-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:12px;">Correlation Matrix</div>', unsafe_allow_html=True)
+                    st.plotly_chart(_fig_corr_heatmap(df, theme=theme), use_container_width=True)
+
+            elif ct == "TimeSeries" and dim == "ND": # 이 부분은 위에서 처리되므로 사실상 도달하지 않음 (기존 ND용 히트맵은 하단 서브차트로 이동 가능)
+                st.plotly_chart(_fig_corr_heatmap(df, theme=theme), use_container_width=True)
             elif ct == "Static":
                 st.plotly_chart(_fig_static_dual(df), use_container_width=True)
             else:

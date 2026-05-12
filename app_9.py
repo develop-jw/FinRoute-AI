@@ -94,9 +94,22 @@ with st.sidebar:
                     try:
                         # 파일 인코딩 에러 방지
                         st.session_state.uploaded_files[f.name] = pd.read_csv(f)
+                    except pd.errors.EmptyDataError:
+                        st.error(f"Error: {f.name} is empty.")
+                        continue
                     except UnicodeDecodeError:
-                        f.seek(0)
-                        st.session_state.uploaded_files[f.name] = pd.read_csv(f, encoding='cp949')
+                        try:
+                            f.seek(0)
+                            st.session_state.uploaded_files[f.name] = pd.read_csv(f, encoding='cp949')
+                        except pd.errors.EmptyDataError:
+                            st.error(f"Error: {f.name} is empty.")
+                            continue
+                        except Exception as e:
+                            st.error(f"Error reading {f.name}: {e}")
+                            continue
+                    except Exception as e:
+                        st.error(f"Error reading {f.name}: {e}")
+                        continue
                     
                     if st.session_state.active_file is None:
                         st.session_state.active_file = f.name
