@@ -86,10 +86,19 @@ with st.sidebar:
         
         # 선택된 파일 찾기
         target_file = next(f for f in st.session_state['uploaded_files'] if f.name == selected_file)
-        df = pd.read_csv(target_file)
-        fname = target_file.name
-        st.session_state['saved_df'] = df
-        st.session_state['selected_fname'] = fname
+        try:
+            df = pd.read_csv(target_file)
+            fname = target_file.name
+            st.session_state['saved_df'] = df
+            st.session_state['selected_fname'] = fname
+        except pd.errors.EmptyDataError:
+            st.error(f"Error: The file '{selected_file}' is empty and contains no data.")
+            df = None
+            fname = ""
+        except Exception as e:
+            st.error(f"Error reading '{selected_file}': {e}")
+            df = None
+            fname = ""
     
     # 2. 파일이 선택되지 않았지만 기존 세션에 데이터가 있는 경우
     elif 'saved_df' in st.session_state:

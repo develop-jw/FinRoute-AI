@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 import feedparser
 from streamlit_lightweight_charts import renderLightweightCharts
@@ -44,7 +45,7 @@ def ticker_tape_html(theme: str = "light") -> str:
 
 
 def _render_lightweight_chart(df: pd.DataFrame, theme: str = "light", show_ma: bool = True, show_bb: bool = False, show_vol: bool = True) -> None:
-    """CSV 데이터를 Lightweight Charts 형식으로 변환하여 렌더링 (MA, 거래량 분리, 지표 토글)."""
+    """CSV 데이터를 Lightweight Charts 형식으로 변환하여 렌더링 (가격과 거래량을 별도 차트로 분리)."""
     dc = _find_col(df, "date", "datetime")
     oc, hc, lc, cc = _find_col(df, "open"), _find_col(df, "high"), _find_col(df, "low"), _find_col(df, "close")
     vc = _find_col(df, "volume")
@@ -60,8 +61,8 @@ def _render_lightweight_chart(df: pd.DataFrame, theme: str = "light", show_ma: b
     w[dc] = pd.to_datetime(w[dc]).dt.strftime('%Y-%m-%d')
     chart_data = w[[dc, oc, hc, lc, cc]].rename(columns={dc: 'time', oc: 'open', hc: 'high', lc: 'low', cc: 'close'})
     
-    # 기술적 지표 생성
-    series = [
+    # 1. 가격 차트 시리즈
+    price_series = [
         {"type": 'Candlestick', "data": chart_data.to_dict('records'), "options": {
             "upColor": "#2ed573", "downColor": "#e74c3c", "borderDownColor": "#e74c3c", 
             "borderUpColor": "#2ed573", "wickDownColor": "#e74c3c", "wickUpColor": "#2ed573"
@@ -72,7 +73,7 @@ def _render_lightweight_chart(df: pd.DataFrame, theme: str = "light", show_ma: b
     if show_ma and len(w) >= 20:
         w['ma20'] = pd.to_numeric(w[cc], errors="coerce").rolling(20).mean()
         ma20_data = w[[dc, 'ma20']].dropna().rename(columns={dc: 'time', 'ma20': 'value'}).to_dict('records')
-        series.append({"type": 'Line', "data": ma20_data, "options": {"color": "#2962ff", "lineWidth": 2}})
+        price_series.append({"type": 'Line', "data": ma20_data, "options": {"color": "#2962ff", "lineWidth": 2}})
     
     # 볼린저 밴드
     if show_bb and len(w) >= 20:
@@ -82,35 +83,46 @@ def _render_lightweight_chart(df: pd.DataFrame, theme: str = "light", show_ma: b
         w['bb_l'] = ma - (std * 2)
         bb_u = w[[dc, 'bb_u']].dropna().rename(columns={dc: 'time', 'bb_u': 'value'}).to_dict('records')
         bb_l = w[[dc, 'bb_l']].dropna().rename(columns={dc: 'time', 'bb_l': 'value'}).to_dict('records')
-        series.append({"type": 'Line', "data": bb_u, "options": {"color": "rgba(255, 152, 0, 0.5)", "lineWidth": 1}})
-        series.append({"type": 'Line', "data": bb_l, "options": {"color": "rgba(255, 152, 0, 0.5)", "lineWidth": 1}})
+        price_series.append({"type": 'Line', "data": bb_u, "options": {"color": "rgba(255, 152, 0, 0.5)", "lineWidth": 1}})
+        price_series.append({"type": 'Line', "data": bb_l, "options": {"color": "rgba(255, 152, 0, 0.5)", "lineWidth": 1}})
 
-    # 거래량
-    if show_vol and vc:
-        volume_data = w[[dc, vc]].rename(columns={dc: 'time', vc: 'value'}).to_dict('records')
-        series.append({"type": 'Histogram', "data": volume_data, "options": {
-            "priceFormat": {"type": 'volume'}, "priceScaleId": 'volume', "color": "#0a5c5c"
-        }})
-    
-    chart_options = {
+    # 가격 차트 옵션
+    price_chart_options = {
         "layout": {"background": {"color": bg_color}, "textColor": text_color},
         "grid": {"vertLines": {"color": grid_color}, "horzLines": {"color": grid_color}},
         "crosshair": {"mode": 0},
+        "height": 400,
         "rightPriceScale": {
             "visible": True,
             "borderColor": "#cccccc",
-            "scaleMargins": {"top": 0.1, "bottom": 0.3} # 가격 차트 상단 10%, 하단 30% 마진
-        },
-        "overlayPriceScales": [
-            {
-                "id": "volume",
-                "scaleMargins": {"top": 0.7, "bottom": 0}, # 거래량 차트 상단 70% 여백 (즉, 하단 30% 영역 차지)
-                "borderColor": "transparent"
-            }
-        ]
+            "scaleMargins": {"top": 0.1, "bottom": 0.1}
+        }
     }
 
-    renderLightweightCharts([{"chart": chart_options, "series": series}], 'chart')
+    charts = [{"chart": price_chart_options, "series": price_series}]
+
+    # 2. 거래량 차트 (별도 차트로 구성)
+    if show_vol and vc:
+        volume_data = w[[dc, vc]].rename(columns={dc: 'time', vc: 'value'}).to_dict('records')
+        volume_series = [
+            {"type": 'Histogram', "data": volume_data, "options": {
+                "priceFormat": {"type": 'volume'}, "color": "#0a5c5c"
+            }}
+        ]
+        volume_chart_options = {
+            "layout": {"background": {"color": bg_color}, "textColor": text_color},
+            "grid": {"vertLines": {"color": grid_color}, "horzLines": {"color": grid_color}},
+            "crosshair": {"mode": 0},
+            "height": 150,
+            "rightPriceScale": {
+                "visible": True,
+                "borderColor": "#cccccc",
+                "scaleMargins": {"top": 0.1, "bottom": 0.1}
+            }
+        }
+        charts.append({"chart": volume_chart_options, "series": volume_series})
+
+    renderLightweightCharts(charts, 'chart')
 
 # (이전 technical_analysis_html 함수는 유지하되 메인 차트에서는 사용하지 않음)
 
@@ -682,21 +694,46 @@ def _hero_row_html(
 </div>
 """
 
+from plotly.subplots import make_subplots
+
 def _fig_candlestick(df: pd.DataFrame) -> go.Figure:
     dc = _find_col(df, "date", "datetime")
     oc, hc, lc, cc = _find_col(df, "open"), _find_col(df, "high"), _find_col(df, "low"), _find_col(df, "close")
+    vc = _find_col(df, "volume")
+    
     if not (dc and oc and hc and lc and cc):
         fig = go.Figure()
         fig.add_annotation(text="OHLC 컬럼이 부족합니다", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
         return fig
+    
     w = df.sort_values(dc)
-    fig = go.Figure(data=[go.Candlestick(x=w[dc], open=w[oc], high=w[hc], low=w[lc], close=w[cc], name="가격")])
-    close = pd.to_numeric(w[cc], errors="coerce")
-    fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(20, min_periods=5).mean(), name="MA20", line=dict(color="#2b83ba", width=1)))
-    fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(60, min_periods=5).mean(), name="MA60", line=dict(color="#fdae61", width=1)))
+    
+    if vc:
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                           vertical_spacing=0.05, 
+                           row_heights=[0.7, 0.3])
+        
+        # 가격 차트
+        fig.add_trace(go.Candlestick(x=w[dc], open=w[oc], high=w[hc], low=w[lc], close=w[cc], name="가격"), row=1, col=1)
+        close = pd.to_numeric(w[cc], errors="coerce")
+        fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(20, min_periods=5).mean(), name="MA20", line=dict(color="#2b83ba", width=1)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(60, min_periods=5).mean(), name="MA60", line=dict(color="#fdae61", width=1)), row=1, col=1)
+        
+        # 거래량 차트
+        vol = pd.to_numeric(w[vc], errors="coerce")
+        colors = ['#2ed573' if w[cc].iloc[i] >= w[oc].iloc[i] else '#e74c3c' for i in range(len(w))]
+        fig.add_trace(go.Bar(x=w[dc], y=vol, name="거래량", marker_color=colors), row=2, col=1)
+        
+        fig.update_layout(height=600)
+    else:
+        fig = go.Figure(data=[go.Candlestick(x=w[dc], open=w[oc], high=w[hc], low=w[lc], close=w[cc], name="가격")])
+        close = pd.to_numeric(w[cc], errors="coerce")
+        fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(20, min_periods=5).mean(), name="MA20", line=dict(color="#2b83ba", width=1)))
+        fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(60, min_periods=5).mean(), name="MA60", line=dict(color="#fdae61", width=1)))
+        fig.update_layout(height=420)
+
     fig.update_layout(
         xaxis_rangeslider_visible=False,
-        height=420,
         margin=dict(l=30, r=20, t=30, b=30),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -1358,59 +1395,6 @@ def _calculate_trading_bias(df: pd.DataFrame) -> tuple[int, str, str]:
     if pct >= 60: return pct, "Bullish", "var(--sq-mint)"
     if pct <= 40: return pct, "Bearish", "var(--sq-danger)"
     return pct, "Neutral", "var(--sq-warn)"
-def _calculate_trading_bias(df: pd.DataFrame) -> tuple[int, str, str]:
-    """10개의 기술적 지표를 앙상블하여 Trading Bias(0~100%)와 라벨을 반환합니다."""
-    if df is None or df.empty: return 50, "Neutral", "var(--sq-warn)"
-    
-    dc = _find_col(df, "date", "datetime")
-    cc = _find_col(df, "close")
-    if not cc: return 50, "Neutral", "var(--sq-warn)"
-
-    w = df.sort_values(dc) if dc else df.copy()
-    close = pd.to_numeric(w[cc], errors="coerce").ffill()
-    
-    # 데이터가 부족하면 기본값 반환
-    if len(close) < 60: return 50, "Neutral", "var(--sq-warn)"
-
-    score, max_score = 0, 10
-    c_last = close.iloc[-1]
-
-    try:
-        if c_last > close.rolling(20).mean().iloc[-1]: score += 1
-        if c_last > close.rolling(60).mean().iloc[-1]: score += 1
-        if close.rolling(20).mean().iloc[-1] > close.rolling(60).mean().iloc[-1]: score += 1
-        
-        dlt = close.diff()
-        g = dlt.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
-        l = (-dlt.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
-        rs = g / l.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
-        if rsi.iloc[-1] > 50: score += 1
-        
-        ema12 = close.ewm(span=12, adjust=False).mean()
-        ema26 = close.ewm(span=26, adjust=False).mean()
-        macd = ema12 - ema26
-        if macd.iloc[-1] > 0: score += 1
-        if macd.iloc[-1] > macd.ewm(span=9, adjust=False).mean().iloc[-1]: score += 1
-        
-        if c_last > close.rolling(5).mean().iloc[-1]: score += 1
-        if c_last > close.iloc[-6]: score += 1
-        if c_last > close.iloc[-2]: score += 1
-
-        vc = _find_col(df, "volume")
-        if vc:
-            vol = pd.to_numeric(w[vc], errors="coerce").fillna(0)
-            if vol.iloc[-1] > vol.rolling(20).mean().iloc[-1]: score += 1
-        else:
-            max_score -= 1
-            
-    except Exception:
-        pass
-
-    pct = int((score / max_score) * 100)
-    if pct >= 60: return pct, "Bullish", "var(--sq-mint)"
-    if pct <= 40: return pct, "Bearish", "var(--sq-danger)"
-    return pct, "Neutral", "var(--sq-warn)"
 
 def build(
     view: str,
@@ -1471,9 +1455,14 @@ def build(
         
         if uploaded_main:
             import pandas as pd
-            st.session_state['saved_df'] = pd.read_csv(uploaded_main) 
-            st.session_state.fin_view = "main"
-            st.rerun()
+            try:
+                st.session_state['saved_df'] = pd.read_csv(uploaded_main) 
+                st.session_state.fin_view = "main"
+                st.rerun()
+            except pd.errors.EmptyDataError:
+                st.error("Error: The uploaded file is empty.")
+            except Exception as e:
+                st.error(f"Error reading file: {e}")
         return
     
     if classify_result is None or df is None:
