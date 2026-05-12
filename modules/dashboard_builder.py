@@ -1736,12 +1736,16 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
             ct  = classify_result.get("class_type", "")
             dim = classify_result.get("dimension", "1D")
             
-            # 2D/ND인 경우 종목 선택 UI 추가
+            # 1D 모드 여부 확인
+            is_1d = (dim == "1D")
+            
+            # 2D/ND인 경우 종목 선택 UI
             tick_col = _find_col(df, "ticker", "symbol", "code", "asset", "asset_name")
             display_df = df
+            selected = []
+            
             if tick_col and dim in ("2D", "ND"):
                 all_tickers = sorted(df[tick_col].unique())
-                
                 def _fmt(t):
                     name = _ticker_to_name(t)
                     return f"{name} ({t})" if name != str(t) else str(t)
@@ -1754,31 +1758,34 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
                     format_func=_fmt
                 )
                 display_df = df[df[tick_col].isin(selected)]
-                
-                # 단일 종목 선택 시에만 지표 UI 표시
-                if len(selected) == 1:
-                    c1, c2, c3 = st.columns([2, 1, 1])
-                    with c1: 
-                        st.multiselect("이동평균선 (MA)", [5, 20, 60, 120], default=[20, 60], key="ma_periods")
-                    with c2: st.checkbox("볼린저 밴드 (BB)", key="show_bb", value=False)
-                    with c3: st.checkbox("일목균형표 (Ichimoku)", key="show_ichimoku", value=False)
-            else:
-                # 1D 모드 등에서는 기본 지표 표시
-                c1, c2, c3 = st.columns([2, 1, 1])
+            
+            # 지표 UI 표시 조건: 1D이거나, 2D/ND에서 단일 종목 선택 시
+            show_indicator_ui = is_1d or (len(selected) == 1)
+            
+            if show_indicator_ui:
+                st.markdown("### 기술 지표 설정")
+                c1, c2, c3, c4 = st.columns(4)
                 with c1: 
-                    st.multiselect("이동평균선 (MA)", [5, 20, 60, 120], default=[20, 60], key="ma_periods")
-                with c2: st.checkbox("볼린저 밴드 (BB)", key="show_bb", value=False)
-                with c3: st.checkbox("일목균형표 (Ichimoku)", key="show_ichimoku", value=False)
+                    st.multiselect("이동평균선 (MA)", [5, 20, 60, 120], default=[], key="ma_periods")
+                    st.checkbox("볼린저 밴드 (BB)", key="show_bb", value=False)
+                with c2: 
+                    st.checkbox("일목균형표 (Ichimoku)", key="show_ichimoku", value=False)
+                    st.checkbox("파라볼릭 SAR (PSAR)", key="show_psar", value=False)
+                with c3:
+                    st.checkbox("스토캐스틱 (Stochastic)", key="show_stoch", value=False)
+                    st.checkbox("CCI", key="show_cci", value=False)
+                with c4:
+                    st.checkbox("엔벨로프 (Env)", key="show_env", value=False)
+                    st.checkbox("OBV", key="show_obv", value=False)
+                st.checkbox("MACD", key="show_macd", value=False)
 
             st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
             if ct == "TimeSeries" and dim in ("1D", "2D", "ND"):
-                # 단일 종목일 때만 지표 활성화
-                is_single = (dim in ("2D", "ND") and len(st.session_state.get("selected_tickers", [])) == 1) or (dim == "1D")
-                
+                # 지표 렌더링은 UI가 표시된 경우에만 활성화
                 _render_lightweight_chart(display_df, theme=theme,
-                    show_ma=st.session_state.get("ma_periods", []) if is_single else None,
-                    show_bb=st.session_state.show_bb if is_single else False,
-                    show_ichimoku=st.session_state.show_ichimoku if is_single else False,
+                    show_ma=st.session_state.get("ma_periods", []) if show_indicator_ui else None,
+                    show_bb=st.session_state.show_bb if show_indicator_ui else False,
+                    show_ichimoku=st.session_state.show_ichimoku if show_indicator_ui else False,
                     show_vol=True)
                 
                 # ND인 경우 하단에 상관계수 히트맵 추가 (사용자 요청)
