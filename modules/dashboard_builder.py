@@ -169,9 +169,9 @@ def _render_lightweight_chart(
                 sub['macd'] = ema12 - ema26
                 price_series.append({"type": 'Line', "data": sub[[dc, 'macd']].dropna().rename(columns={dc:'time', 'macd':'value'}).to_dict('records'), "options": {"color": "#9b59b6", "lineWidth": 1, "title": "MACD"}})
             
-            # 파라볼릭 SAR (간소화)
+            # 파라볼릭 SAR
             if st.session_state.get("show_psar"):
-                sub['psar'] = pd.to_numeric(sub[cc], errors="coerce").rolling(5).min() # 간단 구현 예시
+                sub['psar'] = pd.to_numeric(sub[cc], errors="coerce").rolling(5).min()
                 price_series.append({"type": 'Line', "data": sub[[dc, 'psar']].dropna().rename(columns={dc:'time', 'psar':'value'}).to_dict('records'), "options": {"color": "#34495e", "lineWidth": 1, "title": "PSAR"}})
                 
             # 엔벨로프
@@ -179,8 +179,22 @@ def _render_lightweight_chart(
                 ma = pd.to_numeric(sub[cc], errors="coerce").rolling(20).mean()
                 sub['env_u'] = ma * 1.05
                 sub['env_l'] = ma * 0.95
-                price_series.append({"type": 'Line', "data": sub[[dc, 'env_u']].dropna().rename(columns={dc:'time', 'env_u':'value'}).to_dict('records'), "options": {"color": "#7f8c8d", "lineWidth": 1, "title": "Env"}})
-                price_series.append({"type": 'Line', "data": sub[[dc, 'env_l']].dropna().rename(columns={dc:'time', 'env_l':'value'}).to_dict('records'), "options": {"color": "#7f8c8d", "lineWidth": 1, "title": "Env"}})
+                price_series.append({"type": 'Line', "data": sub[[dc, 'env_u']].dropna().rename(columns={dc:'time', 'env_u':'value'}).to_dict('records'), "options": {"color": "#7f8c8d", "lineWidth": 1, "title": "Env U"}})
+                price_series.append({"type": 'Line', "data": sub[[dc, 'env_l']].dropna().rename(columns={dc:'time', 'env_l':'value'}).to_dict('records'), "options": {"color": "#7f8c8d", "lineWidth": 1, "title": "Env L"}})
+            
+            # CCI
+            if st.session_state.get("show_cci"):
+                tp = (pd.to_numeric(sub[hc]) + pd.to_numeric(sub[lc]) + pd.to_numeric(sub[cc])) / 3
+                cci = (tp - tp.rolling(20).mean()) / (0.015 * tp.rolling(20).std())
+                sub['cci'] = cci
+                price_series.append({"type": 'Line', "data": sub[[dc, 'cci']].dropna().rename(columns={dc:'time', 'cci':'value'}).to_dict('records'), "options": {"color": "#f1c40f", "lineWidth": 1, "title": "CCI"}})
+
+            # OBV
+            if st.session_state.get("show_obv"):
+                obv = (np.sign(pd.to_numeric(sub[cc]).diff()) * pd.to_numeric(sub[vc])).cumsum()
+                sub['obv'] = obv
+                price_series.append({"type": 'Line', "data": sub[[dc, 'obv']].dropna().rename(columns={dc:'time', 'obv':'value'}).to_dict('records'), "options": {"color": "#2c3e50", "lineWidth": 1, "title": "OBV"}})
+
 
 
         # 2. 거래량 시리즈
@@ -1777,13 +1791,13 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
                     st.multiselect("이동평균선 (MA)", [5, 20, 60, 120], default=[], key="ma_periods")
                     st.checkbox("볼린저 밴드 (BB)", key="show_bb", value=False)
                 with c2: 
-                    st.checkbox("일목균형표 (Ichimoku)", key="show_ichimoku", value=False)
-                    st.checkbox("파라볼릭 SAR (PSAR)", key="show_psar", value=False)
+                    st.checkbox("일목균형표", key="show_ichimoku", value=False)
+                    st.checkbox("파라볼릭 SAR", key="show_psar", value=False)
                 with c3:
-                    st.checkbox("스토캐스틱 (Stochastic)", key="show_stoch", value=False)
+                    st.checkbox("스토캐스틱 ", key="show_stoch", value=False)
                     st.checkbox("CCI", key="show_cci", value=False)
                 with c4:
-                    st.checkbox("엔벨로프 (Env)", key="show_env", value=False)
+                    st.checkbox("엔벨로프", key="show_env", value=False)
                     st.checkbox("OBV", key="show_obv", value=False)
                 st.checkbox("MACD", key="show_macd", value=False)
 
