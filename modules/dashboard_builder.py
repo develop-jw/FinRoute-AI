@@ -44,85 +44,120 @@ def ticker_tape_html(theme: str = "light") -> str:
 """
 
 
+_TICKER_COLORS: dict[str, str] = {
+    "005930": "#1dd1a1", # 삼성전자: 틸/민트
+    "000660": "#ffa502", # SK하이닉스: 오렌지/골드
+}
+_DEFAULT_COLORS = ["#2ed573", "#1e90ff", "#ff4757", "#ffa502", "#3742fa", "#70a1ff", "#5352ed", "#2f3542"]
+
 def _render_lightweight_chart(df: pd.DataFrame, theme: str = "light", show_ma: bool = True, show_bb: bool = False, show_vol: bool = True) -> None:
-    """CSV 데이터를 Lightweight Charts 형식으로 변환하여 렌더링 (가격과 거래량을 별도 차트로 분리)."""
+    """CSV 데이터를 Lightweight Charts 형식으로 변환하여 렌더링. 2D/ND인 경우 종목별 유니파이드 컬러 적용."""
     dc = _find_col(df, "date", "datetime")
     oc, hc, lc, cc = _find_col(df, "open"), _find_col(df, "high"), _find_col(df, "low"), _find_col(df, "close")
     vc = _find_col(df, "volume")
+    tick_col = _find_col(df, "ticker", "symbol", "code", "asset", "asset_name")
     
     # 테마 설정
     is_dark = (theme == "dark")
     bg_color = "#1e252e" if is_dark else "#ffffff"
     text_color = "#f0f7f5" if is_dark else "#333333"
     grid_color = "#313d4a" if is_dark else "#eeeeee"
-    
-    # 데이터 정리
-    w = df.copy()
-    w[dc] = pd.to_datetime(w[dc]).dt.strftime('%Y-%m-%d')
-    chart_data = w[[dc, oc, hc, lc, cc]].rename(columns={dc: 'time', oc: 'open', hc: 'high', lc: 'low', cc: 'close'})
-    
-    # 1. 가격 차트 시리즈
-    price_series = [
-        {"type": 'Candlestick', "data": chart_data.to_dict('records'), "options": {
-            "upColor": "#2ed573", "downColor": "#e74c3c", "borderDownColor": "#e74c3c", 
-            "borderUpColor": "#2ed573", "wickDownColor": "#e74c3c", "wickUpColor": "#2ed573"
-        }}
-    ]
 
-    # MA20
-    if show_ma and len(w) >= 20:
-        w['ma20'] = pd.to_numeric(w[cc], errors="coerce").rolling(20).mean()
-        ma20_data = w[[dc, 'ma20']].dropna().rename(columns={dc: 'time', 'ma20': 'value'}).to_dict('records')
-        price_series.append({"type": 'Line', "data": ma20_data, "options": {"color": "#2962ff", "lineWidth": 2}})
-    
-    # 볼린저 밴드
-    if show_bb and len(w) >= 20:
-        ma = pd.to_numeric(w[cc], errors="coerce").rolling(20).mean()
-        std = pd.to_numeric(w[cc], errors="coerce").rolling(20).std()
-        w['bb_u'] = ma + (std * 2)
-        w['bb_l'] = ma - (std * 2)
-        bb_u = w[[dc, 'bb_u']].dropna().rename(columns={dc: 'time', 'bb_u': 'value'}).to_dict('records')
-        bb_l = w[[dc, 'bb_l']].dropna().rename(columns={dc: 'time', 'bb_l': 'value'}).to_dict('records')
-        price_series.append({"type": 'Line', "data": bb_u, "options": {"color": "rgba(255, 152, 0, 0.5)", "lineWidth": 1}})
-        price_series.append({"type": 'Line', "data": bb_l, "options": {"color": "rgba(255, 152, 0, 0.5)", "lineWidth": 1}})
-
-    # 가격 차트 옵션
     price_chart_options = {
         "layout": {"background": {"color": bg_color}, "textColor": text_color},
         "grid": {"vertLines": {"color": grid_color}, "horzLines": {"color": grid_color}},
         "crosshair": {"mode": 0},
         "height": 400,
-        "rightPriceScale": {
-            "visible": True,
-            "borderColor": "#cccccc",
-            "scaleMargins": {"top": 0.1, "bottom": 0.1}
-        }
+        "rightPriceScale": {"visible": True, "borderColor": "#cccccc", "scaleMargins": {"top": 0.1, "bottom": 0.1}}
+    }
+    
+    volume_chart_options = {
+        "layout": {"background": {"color": bg_color}, "textColor": text_color},
+        "grid": {"vertLines": {"color": grid_color}, "horzLines": {"color": grid_color}},
+        "crosshair": {"mode": 0},
+        "height": 150,
+        "rightPriceScale": {"visible": True, "borderColor": "#cccccc", "scaleMargins": {"top": 0.1, "bottom": 0.1}}
     }
 
-    charts = [{"chart": price_chart_options, "series": price_series}]
+    price_series = []
+    volume_series = []
+    
+    # 데이터 정리 및 그룹화
+    w = df.copy()
+    w[dc] = pd.to_datetime(w[dc]).dt.strftime('%Y-%m-%d')
+    
+    tickers = [None]
+    if tick_col and w[tick_col].nunique() > 1:
+        tickers = sorted(w[tick_col].unique())
+    
+    for i, t in enumerate(tickers):
+        sub = w[w[tick_col] == t] if t else w
+        if sub.empty: continue
+        
+        t_name = _ticker_to_name(str(t)) if t else "가격"
+        color = _TICKER_COLORS.get(str(t), _DEFAULT_COLORS[i % len(_DEFAULT_COLORS)]) if t else None
+        
+        # 1. 가격 시리즈 (2D/ND 비교 모드일 때는 라인 차트 권장되나, 요청에 따라 유니파이드 컬러 캔들/라인 지원)
+        chart_data = sub[[dc, oc, hc, lc, cc]].rename(columns={dc: 'time', oc: 'open', hc: 'high', lc: 'low', cc: 'close'})
+        
+        if len(tickers) > 1:
+            # 여러 종목 비교 시에는 라인 차트로 중첩 (캔들은 겹치면 보기 힘듦)
+            line_data = sub[[dc, cc]].rename(columns={dc: 'time', cc: 'value'}).to_dict('records')
+            price_series.append({
+                "type": 'Line', 
+                "data": line_data, 
+                "options": {"color": color, "lineWidth": 2, "title": t_name}
+            })
+        else:
+            # 단일 종목일 때는 기본 캔들스틱
+            price_series.append({
+                "type": 'Candlestick', 
+                "data": chart_data.to_dict('records'), 
+                "options": {
+                    "upColor": "#2ed573", "downColor": "#e74c3c", "borderDownColor": "#e74c3c", 
+                    "borderUpColor": "#2ed573", "wickDownColor": "#e74c3c", "wickUpColor": "#2ed573"
+                }
+            })
 
-    # 2. 거래량 차트 (별도 차트로 구성)
-    if show_vol and vc:
-        volume_data = w[[dc, vc]].rename(columns={dc: 'time', vc: 'value'}).to_dict('records')
-        volume_series = [
-            {"type": 'Histogram', "data": volume_data, "options": {
-                "priceFormat": {"type": 'volume'}, "color": "#0a5c5c"
-            }}
-        ]
-        volume_chart_options = {
-            "layout": {"background": {"color": bg_color}, "textColor": text_color},
-            "grid": {"vertLines": {"color": grid_color}, "horzLines": {"color": grid_color}},
-            "crosshair": {"mode": 0},
-            "height": 150,
-            "rightPriceScale": {
-                "visible": True,
-                "borderColor": "#cccccc",
-                "scaleMargins": {"top": 0.1, "bottom": 0.1}
-            }
-        }
+        # MA/BB (단일 종목일 때만 표시하거나 첫 번째 종목에만 표시)
+        if (len(tickers) == 1 or i == 0) and show_ma and len(sub) >= 20:
+            sub['ma20'] = pd.to_numeric(sub[cc], errors="coerce").rolling(20).mean()
+            ma20_data = sub[[dc, 'ma20']].dropna().rename(columns={dc: 'time', 'ma20': 'value'}).to_dict('records')
+            price_series.append({"type": 'Line', "data": ma20_data, "options": {"color": "#2962ff", "lineWidth": 2, "title": f"{t_name} MA20" if t else "MA20"}})
+            
+        if (len(tickers) == 1 or i == 0) and show_bb and len(sub) >= 20:
+            ma = pd.to_numeric(sub[cc], errors="coerce").rolling(20).mean()
+            std = pd.to_numeric(sub[cc], errors="coerce").rolling(20).std()
+            sub['bb_u'], sub['bb_l'] = ma + (std * 2), ma - (std * 2)
+            bb_u = sub[[dc, 'bb_u']].dropna().rename(columns={dc: 'time', 'bb_u': 'value'}).to_dict('records')
+            bb_l = sub[[dc, 'bb_l']].dropna().rename(columns={dc: 'time', 'bb_l': 'value'}).to_dict('records')
+            price_series.append({"type": 'Line', "data": bb_u, "options": {"color": "rgba(255, 152, 0, 0.5)", "lineWidth": 1}})
+            price_series.append({"type": 'Line', "data": bb_l, "options": {"color": "rgba(255, 152, 0, 0.5)", "lineWidth": 1}})
+
+        # 2. 거래량 시리즈
+        if show_vol and vc:
+            v_data = sub[[dc, vc]].rename(columns={dc: 'time', vc: 'value'}).to_dict('records')
+            v_color = color if color else "#0a5c5c"
+            
+            # 여러 종목 비교 시 거래량 투명도 적용
+            if len(tickers) > 1 and v_color.startswith("#"):
+                r = int(v_color[1:3], 16)
+                g = int(v_color[3:5], 16)
+                b = int(v_color[5:7], 16)
+                v_color = f"rgba({r}, {g}, {b}, 0.5)"
+                
+            volume_series.append({
+                "type": 'Histogram', 
+                "data": v_data, 
+                "options": {"priceFormat": {"type": 'volume'}, "color": v_color, "title": t_name if t else ""}
+            })
+
+    charts = [{"chart": price_chart_options, "series": price_series}]
+    if volume_series:
         charts.append({"chart": volume_chart_options, "series": volume_series})
 
     renderLightweightCharts(charts, 'chart')
+
 
 # (이전 technical_analysis_html 함수는 유지하되 메인 차트에서는 사용하지 않음)
 
@@ -1669,19 +1704,28 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
             ct  = classify_result.get("class_type", "")
             dim = classify_result.get("dimension", "1D")
             
-            if ct == "TimeSeries" and dim in ("1D", "2D"):
+            if ct == "TimeSeries" and dim in ("1D", "2D", "ND"):
                 c1, c2 = st.columns(2)
                 with c1: st.checkbox("이동평균선 (MA20)", key="show_ma", value=True)
                 with c2: st.checkbox("볼린저 밴드 (BB)", key="show_bb", value=False)
 
+                # 2D/ND인 경우 종목 선택 UI 추가
+                tick_col = _find_col(df, "ticker", "symbol", "code", "asset", "asset_name")
+                if tick_col and dim in ("2D", "ND"):
+                    all_tickers = sorted(df[tick_col].unique())
+                    st.multiselect("비교할 종목 선택", all_tickers, default=all_tickers, key="selected_tickers")
+                    display_df = df[df[tick_col].isin(st.session_state.selected_tickers)]
+                else:
+                    display_df = df
+
             st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
-            if ct == "TimeSeries" and dim in ("1D", "2D"):
-                # 1D/2D 모두 프리미엄 UI로 통일
-                _render_lightweight_chart(df, theme=theme,
+            if ct == "TimeSeries" and dim in ("1D", "2D", "ND"):
+                # 1D/2D/ND 모두 프리미엄 UI로 통일
+                _render_lightweight_chart(display_df, theme=theme,
                     show_ma=st.session_state.show_ma,
                     show_bb=st.session_state.show_bb,
                     show_vol=True)
-            elif ct == "TimeSeries" and dim == "ND":
+            elif ct == "TimeSeries" and dim == "ND": # 이 부분은 위에서 처리되므로 사실상 도달하지 않음 (기존 ND용 히트맵은 하단 서브차트로 이동 가능)
                 st.plotly_chart(_fig_corr_heatmap(df, theme=theme), use_container_width=True)
             elif ct == "Static":
                 st.plotly_chart(_fig_static_dual(df), use_container_width=True)
