@@ -86,6 +86,12 @@ with st.sidebar:
         
         # 선택된 파일 찾기
         target_file = next(f for f in st.session_state['uploaded_files'] if f.name == selected_file)
+        
+        # 파일이 변경되었는지 체크하여 종목 선택 세션 초기화
+        if st.session_state.get('selected_fname') != target_file.name:
+            if 'selected_tickers' in st.session_state: del st.session_state['selected_tickers']
+            if 'selected_names' in st.session_state: del st.session_state['selected_names']
+
         try:
             df = pd.read_csv(target_file)
             fname = target_file.name
