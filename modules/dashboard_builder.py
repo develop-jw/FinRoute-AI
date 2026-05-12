@@ -1207,116 +1207,90 @@ def _fig_network(df: pd.DataFrame, indicator_result: dict, theme: str = "light")
             return 0.0
         return float((spread.iloc[-1] - s_mean) / s_std)
 
-    # ── Force-directed 배치 (상관계수 기반) ──
-    # 초기: 원형 배치 → 반발/인력 시뮬레이션
-    pos = {}
-    for i, t in enumerate(raw_tickers):
-        a = 2 * np.pi * i / n
-        pos[t] = np.array([np.cos(a), np.sin(a)], dtype=float)
-
-    ITER      = 80
+    import networkx as nx
     threshold = 0.5
-    for _ in range(ITER):
-        forces = {t: np.zeros(2) for t in raw_tickers}
-        for i, t1 in enumerate(raw_tickers):
-            for j, t2 in enumerate(raw_tickers):
-                if j <= i:
-                    continue
-                diff = pos[t1] - pos[t2]
-                dist = float(np.linalg.norm(diff)) + 1e-6
-                unit = diff / dist
-                try:
-                    corr_val = float(corr_mat.loc[t1, t2])
-                except KeyError:
-                    corr_val = 0.0
-                if not np.isfinite(corr_val):
-                    corr_val = 0.0
-                # 인력 (상관 높을수록 강하게 당김)
-                attract = corr_val * corr_val * 0.08
-                # 반발 (너무 가까워지지 않도록)
-                repulse = 0.03 / (dist * dist)
-                f = (-attract + repulse) * unit
-                forces[t1] += f
-                forces[t2] -= f
-        for t in raw_tickers:
-            pos[t] += forces[t] * 0.3
-        # 범위 클리핑
-        for t in raw_tickers:
-            pos[t] = np.clip(pos[t], -1.2, 1.2)
 
-    # ── 엣지 렌더링 ──
+    # ── 3D Force-directed 배치 (상관계수 기반) ──
+    G = nx.Graph()
+    for t in raw_tickers:
+        G.add_node(t)
+    
+    for i, t1 in enumerate(raw_tickers):
+        for j, t2 in enumerate(raw_tickers):
+            if j <= i: continue
+            try:
+                corr_val = float(corr_mat.loc[t1, t2])
+            except: corr_val = 0.0
+            if abs(corr_val) > threshold:
+                G.add_edge(t1, t2, weight=abs(corr_val))
+    
+    # 3D 위치 계산
+    pos_3d = nx.spring_layout(G, dim=3, seed=42)
+    pos = {t: np.array(pos_3d.get(t, [0, 0, 0]), dtype=float) for t in raw_tickers}
+
+    # ── 엣지 렌더링 (3D) ──
     edge_count = 0
     for i, t1 in enumerate(raw_tickers):
         for j, t2 in enumerate(raw_tickers):
-            if j <= i:
-                continue
+            if j <= i: continue
             try:
                 corr_val = float(corr_mat.loc[t1, t2])
-            except KeyError:
-                continue
-            if not np.isfinite(corr_val) or abs(corr_val) <= threshold:
-                continue
+            except: continue
+            if not np.isfinite(corr_val) or abs(corr_val) <= threshold: continue
 
             z = pair_zscore(t1, t2)
-            # Z-score 임계치 초과 → 빨강 (페어트레이딩 진입 신호)
-            if abs(z) > 2:
-                color = "rgba(231,76,60,0.85)"
-                label = f"{display[t1]}↔{display[t2]}: corr={corr_val:.2f} | Z={z:.2f} 🔴진입신호"
-            else:
-                color = "rgba(10,92,92,0.75)"
-                label = f"{display[t1]}↔{display[t2]}: corr={corr_val:.2f} | Z={z:.2f}"
+            color = "rgba(231,76,60,0.85)" if abs(z) > 2 else "rgba(10,92,92,0.75)"
+            label = f"{display[t1]}↔{display[t2]}: corr={corr_val:.2f} | Z={z:.2f}"
 
-            x0, y0 = pos[t1]
-            x1, y1 = pos[t2]
-            width  = max(1.5, abs(corr_val) * 6)
-            mx, my = (x0+x1)/2, (y0+y1)/2
-
-            fig.add_trace(go.Scatter(
-                x=[x0, mx, x1, None], y=[y0, my, y1, None],
+            x0, y0, z0 = pos[t1]
+            x1, y1, z1 = pos[t2]
+            
+            fig.add_trace(go.Scatter3d(
+                x=[x0, x1], y=[y0, y1], z=[z0, z1],
                 mode="lines",
-                line=dict(color=color, width=width),
+                line=dict(color=color, width=max(2, abs(corr_val) * 8)),
                 hoverinfo="text",
-                hovertext=[None, label, None, None],
-                showlegend=False, name="",
+                text=label,
+                showlegend=False,
             ))
             edge_count += 1
 
-    if edge_count == 0:
-        fig.add_annotation(
-            text=f"상관계수 {threshold} 초과 쌍 없음",
-            xref="paper", yref="paper", x=0.5, y=0.5,
-            showarrow=False, font=dict(color=txt, size=12),
-        )
-
-    # ── 노드 렌더링 ──
+    # ── 노드 렌더링 (3D) ──
     centrality  = indicator_result.get("centrality") or {}
-    node_x      = [float(pos[t][0]) for t in raw_tickers]
-    node_y      = [float(pos[t][1]) for t in raw_tickers]
-    node_size   = [22 + centrality.get(t, 0) * 25 for t in raw_tickers]
+    node_x = [pos[t][0] for t in raw_tickers]
+    node_y = [pos[t][1] for t in raw_tickers]
+    node_z = [pos[t][2] for t in raw_tickers]
+    
+    # 노드별 고유 색상 할당
+    node_colors = [_DEFAULT_COLORS[i % len(_DEFAULT_COLORS)] for i in range(len(raw_tickers))]
+    node_size = [30 + centrality.get(t, 0) * 40 for t in raw_tickers]
     node_labels = [display[t] for t in raw_tickers]
-    hover_texts = [
-        f"<b>{display[t]}</b><br>현재가: {latest_price.get(t,0):,.0f}<br>중심성: {centrality.get(t,0):.2f}"
-        for t in raw_tickers
-    ]
-
-    fig.add_trace(go.Scatter(
-        x=node_x, y=node_y, mode="markers+text",
-        marker=dict(size=node_size, color="#1dd1a1",
-                    line=dict(color="#0a5c5c", width=2.5), opacity=0.95),
-        text=node_labels, textposition="top center",
-        textfont=dict(color=txt, size=11),
-        hoverinfo="text", hovertext=hover_texts,
-        hoverlabel=dict(bgcolor="#063d3d", bordercolor="#1dd1a1",
-                        font=dict(color="#f4faf9", size=12)),
-        showlegend=False, name="",
+    
+    fig.add_trace(go.Scatter3d(
+        x=node_x, y=node_y, z=node_z,
+        mode="markers+text",
+        marker=dict(
+            size=node_size,
+            color=node_colors,
+            opacity=0.95,
+            line=dict(color='white', width=2)
+        ),
+        text=node_labels,
+        textposition="top center",
+        textfont=dict(color=txt, size=14, weight='bold'),
+        hoverinfo="text",
+        hovertext=[f"<b>{display[t]}</b><br>현재가: {latest_price.get(t,0):,.0f}" for t in raw_tickers]
     ))
-
+    
     fig.update_layout(
-        height=360, margin=dict(l=20, r=20, t=30, b=20),
-        paper_bgcolor=bg, plot_bgcolor=bg,
-        xaxis=dict(visible=False, range=[-1.6, 1.6]),
-        yaxis=dict(visible=False, range=[-1.6, 1.6]),
-        showlegend=False, hovermode="closest",
+        scene=dict(
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, visible=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, visible=False),
+            zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, visible=False),
+            bgcolor=bg
+        ),
+        margin=dict(l=0, r=0, b=0, t=0),
+        showlegend=False
     )
     return fig
 
