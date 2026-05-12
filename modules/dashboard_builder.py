@@ -1725,6 +1725,13 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
                     show_ma=st.session_state.show_ma,
                     show_bb=st.session_state.show_bb,
                     show_vol=True)
+                
+                # ND인 경우 하단에 상관계수 히트맵 추가 (사용자 요청)
+                if dim == "ND":
+                    st.markdown('<div style="margin-top:20px; border-top:1px solid var(--sq-border); padding-top:20px;"></div>', unsafe_allow_html=True)
+                    st.markdown('<div style="font-size:0.85rem; font-weight:700; color:var(--sq-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:12px;">Correlation Matrix</div>', unsafe_allow_html=True)
+                    st.plotly_chart(_fig_corr_heatmap(df, theme=theme), use_container_width=True)
+
             elif ct == "TimeSeries" and dim == "ND": # 이 부분은 위에서 처리되므로 사실상 도달하지 않음 (기존 ND용 히트맵은 하단 서브차트로 이동 가능)
                 st.plotly_chart(_fig_corr_heatmap(df, theme=theme), use_container_width=True)
             elif ct == "Static":
