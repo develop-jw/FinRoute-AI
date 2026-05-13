@@ -130,7 +130,7 @@ def _render_lightweight_chart(
                 price_series.append({"type": 'Line', "data": sub[[dc, cc]].assign(value=macd).dropna()[[dc, 'value']].rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#ff9ff3", "lineWidth": 1, "title": "MACD"}})
                 price_series.append({"type": 'Line', "data": sub[[dc, cc]].assign(value=signal).dropna()[[dc, 'value']].rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#54a0ff", "lineWidth": 1, "title": "MACD Signal"}})
 
-            # SAR (Simple approximation)
+            # SAR
             if st.session_state.get("show_psar", False) and len(sub) >= 2:
                 high = pd.to_numeric(sub[hc], errors="coerce")
                 low = pd.to_numeric(sub[lc], errors="coerce")
@@ -161,6 +161,22 @@ def _render_lightweight_chart(
                             ep = high.iloc[i]
                             af = 0.02
                 price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=sar).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#feca57", "lineWidth": 0, "lineStyle": 2, "pointMarkers": True, "title": "SAR"}})
+
+            # CCI (14 period)
+            if st.session_state.get("show_cci", False) and len(sub) >= 20:
+                tp = (pd.to_numeric(sub[hc]) + pd.to_numeric(sub[lc]) + pd.to_numeric(sub[cc])) / 3
+                cci = (tp - tp.rolling(20).mean()) / (0.015 * tp.rolling(20).std())
+                price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=cci).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#48dbfb", "lineWidth": 1, "title": "CCI"}})
+
+            # Stochastic (14, 3, 3)
+            if st.session_state.get("show_stoch", False) and len(sub) >= 14:
+                high = pd.to_numeric(sub[hc])
+                low = pd.to_numeric(sub[lc])
+                close = pd.to_numeric(sub[cc])
+                k = 100 * (close - low.rolling(14).min()) / (high.rolling(14).max() - low.rolling(14).min())
+                d = k.rolling(3).mean()
+                price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=k).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#ff9f43", "lineWidth": 1, "title": "Stoch %K"}})
+                price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=d).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#5f27cd", "lineWidth": 1, "title": "Stoch %D"}})
 
         if show_vol and vc:
             v_data = sub[[dc, vc]].rename(columns={dc: 'time', vc: 'value'}).to_dict('records')
