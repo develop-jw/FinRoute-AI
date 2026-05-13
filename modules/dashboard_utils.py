@@ -149,21 +149,52 @@ def _fig_corr_heatmap(df: pd.DataFrame, theme: str = "light") -> go.Figure:
     return fig
 
 def _fig_vwap_bar(df: pd.DataFrame, theme: str = "light") -> go.Figure:
-    """Activity 1D: 실행 단가 vs VWAP."""
+    """Activity 1D: TradingView 스타일의 가상 캔들차트 및 VWAP."""
     is_dark = (theme == "dark")
     bg, txt, grd = ("#1e252e", "#f0f7f5", "#313d4a") if is_dark else ("#fafbfb", "#1a2d30", "#dde3e8")
-    tc = _find_col(df, "ticker", "symbol", "code", "asset")
+    dc = _find_col(df, "date", "datetime", "timestamp")
     pc = _find_col(df, "price", "execution_price")
     vc = _find_col(df, "vwap", "avg_price")
+    bc = _find_col(df, "side", "buy/sell")
+    
     fig = go.Figure()
-    if not (tc and pc and vc):
-        fig.add_annotation(text="Ticker/Price/VWAP 컬럼이 필요합니다", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+    if not (dc and pc and vc and bc):
+        fig.add_annotation(text="필수 컬럼이 누락되었습니다.", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
         return fig
-    w = df.copy()
-    w['diff'] = pd.to_numeric(w[pc]) - pd.to_numeric(w[vc])
-    colors = np.where(w['diff'] >= 0, "#e74c3c", "#2ed573")
-    fig.add_trace(go.Bar(x=w[tc], y=w['diff'], marker_color=colors, name="VWAP 대비 차이", text=w['diff'].round(1), textposition='auto'))
-    fig.update_layout(height=400, margin=dict(l=40, r=20, t=40, b=40), paper_bgcolor=bg, plot_bgcolor=bg, font=dict(family="DM Sans, sans-serif", color=txt), xaxis=dict(gridcolor=grd), yaxis=dict(gridcolor=grd), title=dict(text="실행 단가 vs VWAP (매매 효율성)", font=dict(size=14, weight='bold')))
+    
+    w = df.copy().sort_values(dc)
+    w['is_buy'] = w[bc].apply(lambda x: str(x).lower().startswith('b'))
+    
+    # 캔들 생성을 위한 가상 OHLC
+    # 가격(pc)을 종가(close)로 보고, 가격의 0.1%를 몸통 크기로 설정
+    w['close'] = pd.to_numeric(w[pc])
+    w['open'] = np.where(w['is_buy'], w['close'] * 0.9995, w['close'] * 1.0005)
+    w['high'] = w[['open', 'close']].max(axis=1) * 1.0002
+    w['low'] = w[['open', 'close']].min(axis=1) * 0.9998
+    
+    # TradingView 스타일 캔들
+    fig.add_trace(go.Candlestick(
+        x=w[dc],
+        open=w['open'], high=w['high'], low=w['low'], close=w['close'],
+        increasing_line_color='#2ed573', decreasing_line_color='#ff4757',
+        name="거래 캔들"
+    ))
+    
+    # VWAP 라인
+    fig.add_trace(go.Scatter(
+        x=w[dc], y=pd.to_numeric(w[vc]), 
+        mode='lines', 
+        line=dict(color="#f1c40f", width=2, dash='dot'), 
+        name="VWAP"
+    ))
+    
+    fig.update_layout(
+        height=400, margin=dict(l=50, r=30, t=50, b=50), 
+        paper_bgcolor=bg, plot_bgcolor=bg, font=dict(family="DM Sans, sans-serif", color=txt), 
+        xaxis=dict(gridcolor=grd, showgrid=True), yaxis=dict(gridcolor=grd, showgrid=True),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        title=dict(text="거래 분석 (TradingView 스타일)", font=dict(size=16, weight='bold'))
+    )
     return fig
 
 def _fig_scatter_pf(df: pd.DataFrame, theme: str = "light") -> go.Figure:
