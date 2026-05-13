@@ -42,7 +42,13 @@ def _render_lightweight_chart(
     show_vol: bool = True
 ) -> None:
     dc = _find_col(df, "date", "datetime")
+    if dc is None:
+        st.error("데이터에 날짜(date) 컬럼이 없습니다.")
+        return
     oc, hc, lc, cc = _find_col(df, "open"), _find_col(df, "high"), _find_col(df, "low"), _find_col(df, "close")
+    if not (oc and hc and lc and cc):
+        st.error("데이터에 필요한 가격 컬럼(open, high, low, close)이 부족합니다.")
+        return
     vc = _find_col(df, "volume")
     tick_col = _find_col(df, "ticker", "symbol", "code", "asset", "asset_name")
     
@@ -113,6 +119,49 @@ def _render_lightweight_chart(
                 sub['senkou_b'] = ((h.rolling(52).max() + l.rolling(52).min()) / 2).shift(26)
                 for col in ['tenkan', 'kijun', 'senkou_a', 'senkou_b']:
                     price_series.append({"type": 'Line', "data": sub[[dc, col]].dropna().rename(columns={dc:'time', col:'value'}).to_dict('records'), "options": {"lineWidth": 1, "title": col.capitalize()}})
+            
+            # MACD
+            if st.session_state.get("show_macd", False) and len(sub) >= 26:
+                close = pd.to_numeric(sub[cc], errors="coerce")
+                exp1 = close.ewm(span=12, adjust=False).mean()
+                exp2 = close.ewm(span=26, adjust=False).mean()
+                macd = exp1 - exp2
+                signal = macd.ewm(span=9, adjust=False).mean()
+                price_series.append({"type": 'Line', "data": sub[[dc, cc]].assign(value=macd).dropna()[[dc, 'value']].rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#ff9ff3", "lineWidth": 1, "title": "MACD"}})
+                price_series.append({"type": 'Line', "data": sub[[dc, cc]].assign(value=signal).dropna()[[dc, 'value']].rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#54a0ff", "lineWidth": 1, "title": "MACD Signal"}})
+
+            # SAR (Simple approximation)
+            if st.session_state.get("show_psar", False) and len(sub) >= 2:
+                high = pd.to_numeric(sub[hc], errors="coerce")
+                low = pd.to_numeric(sub[lc], errors="coerce")
+                sar = pd.Series(index=sub.index, dtype='float64')
+                af = 0.02
+                ep = high.iloc[0]
+                sar.iloc[0] = low.iloc[0]
+                bull = True
+                for i in range(1, len(sub)):
+                    if bull:
+                        sar.iloc[i] = sar.iloc[i-1] + af * (ep - sar.iloc[i-1])
+                        if high.iloc[i] > ep:
+                            ep = high.iloc[i]
+                            af = min(af + 0.02, 0.2)
+                        if low.iloc[i] < sar.iloc[i]:
+                            bull = False
+                            sar.iloc[i] = ep
+                            ep = low.iloc[i]
+                            af = 0.02
+                    else:
+                        sar.iloc[i] = sar.iloc[i-1] - af * (sar.iloc[i-1] - ep)
+                        if low.iloc[i] < ep:
+                            ep = low.iloc[i]
+                            af = min(af + 0.02, 0.2)
+                        if high.iloc[i] > sar.iloc[i]:
+                            bull = True
+                            sar.iloc[i] = ep
+                            ep = high.iloc[i]
+                            af = 0.02
+                price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=sar).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#feca57", "lineWidth": 0, "lineStyle": 2, "pointMarkers": True, "title": "SAR"}})
+
         if show_vol and vc:
             v_data = sub[[dc, vc]].rename(columns={dc: 'time', vc: 'value'}).to_dict('records')
             v_color = color if color else "#0a5c5c"
