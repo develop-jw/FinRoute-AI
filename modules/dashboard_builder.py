@@ -14,6 +14,7 @@ import feedparser
 from streamlit_lightweight_charts import renderLightweightCharts
 from .dashboard_timeseries import dashboard_timeseries
 from .dashboard_activity import dashboard_activity
+from .dashboard_portfolio import dashboard_portfolio
 from .dashboard_utils import (
     _find_col, _ticker_to_name, _render_lightweight_chart, _fig_corr_heatmap,
     _fig_scatter_pf, _fig_switch_bar, _fig_activity_timeline
@@ -1580,9 +1581,7 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
             if ct == "TimeSeries":
                 dashboard_timeseries(df, classify_result, indicator_result, theme=theme)
             elif ct == "Static":
-                st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
-                st.plotly_chart(_fig_static_dual(df), use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                dashboard_portfolio(df, classify_result, indicator_result, theme=theme)
             elif ct == "Activity":
                 dashboard_activity(df, classify_result, indicator_result, theme=theme)
             else:
