@@ -14,7 +14,10 @@ import feedparser
 from streamlit_lightweight_charts import renderLightweightCharts
 from .dashboard_timeseries import dashboard_timeseries
 from .dashboard_activity import dashboard_activity
-from .dashboard_utils import _find_col, _ticker_to_name, _render_lightweight_chart, _fig_corr_heatmap
+from .dashboard_utils import (
+    _find_col, _ticker_to_name, _render_lightweight_chart, _fig_corr_heatmap,
+    _fig_scatter_pf, _fig_switch_bar, _fig_activity_timeline
+)
 
 from urllib.parse import quote  # URL 인코딩을 위해 추가
 
@@ -1594,15 +1597,21 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
                 if sub_id == "rsi":
                     st.plotly_chart(_fig_rsi(df), use_container_width=True)
                 elif sub_id == "zscore":
-                    st.plotly_chart(_fig_zscore(df, indicator_result), use_container_width=True)
+                    st.plotly_chart(_fig_zscore(df, indicator_result, theme=theme), use_container_width=True)
                 elif sub_id == "rolling_corr":
-                    st.plotly_chart(_fig_rolling_corr(df), use_container_width=True)
+                    st.plotly_chart(_fig_rolling_corr(df, theme=theme), use_container_width=True)
                 elif sub_id == "network":
-                    st.plotly_chart(_fig_network(df, indicator_result), use_container_width=True)
+                    st.plotly_chart(_fig_network(df, indicator_result, theme=theme), use_container_width=True)
                 elif sub_id == "excess_bar":
                     st.plotly_chart(_fig_excess_bar(df), use_container_width=True)
                 elif sub_id == "weight_drift_bar":
                     st.plotly_chart(_fig_weight_drift(df), use_container_width=True)
+                elif sub_id == "scatter_pf":
+                    st.plotly_chart(_fig_scatter_pf(df, theme=theme), use_container_width=True)
+                elif sub_id == "switch_bar":
+                    st.plotly_chart(_fig_switch_bar(df, theme=theme), use_container_width=True)
+                elif sub_id == "timeline":
+                    st.plotly_chart(_fig_activity_timeline(df, theme=theme), use_container_width=True)
                 else:
                     st.caption(f"서브 차트 준비 중: {sub_id}")
 

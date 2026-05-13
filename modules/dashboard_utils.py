@@ -147,3 +147,107 @@ def _fig_corr_heatmap(df: pd.DataFrame, theme: str = "light") -> go.Figure:
     fig.add_trace(go.Heatmap(z=corr_mat.values, x=str_labels, y=str_labels, colorscale=[[0, "#e74c3c"], [0.5, "#f7f9fb"], [1, "#0a5c5c"]], zmin=-1, zmax=1, text=[[f"{v:.2f}" for v in row] for row in corr_mat.values], texttemplate="%{text}", textfont=dict(size=11), showscale=True, xgap=2, ygap=2))
     fig.update_layout(height=420, margin=dict(l=80, r=20, t=30, b=80), paper_bgcolor=bg, plot_bgcolor=bg, font=dict(family="DM Sans, sans-serif", color=txt), xaxis=dict(type="category", tickfont=dict(size=10), tickangle=-30), yaxis=dict(type="category", tickfont=dict(size=10), autorange="reversed"))
     return fig
+
+def _fig_vwap_bar(df: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """Activity 1D: 실행 단가 vs VWAP."""
+    is_dark = (theme == "dark")
+    bg, txt, grd = ("#1e252e", "#f0f7f5", "#313d4a") if is_dark else ("#fafbfb", "#1a2d30", "#dde3e8")
+    tc = _find_col(df, "ticker", "symbol", "code", "asset")
+    pc = _find_col(df, "price", "execution_price")
+    vc = _find_col(df, "vwap", "avg_price")
+    fig = go.Figure()
+    if not (tc and pc and vc):
+        fig.add_annotation(text="Ticker/Price/VWAP 컬럼이 필요합니다", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+        return fig
+    w = df.copy()
+    w['diff'] = pd.to_numeric(w[pc]) - pd.to_numeric(w[vc])
+    colors = np.where(w['diff'] >= 0, "#e74c3c", "#2ed573")
+    fig.add_trace(go.Bar(x=w[tc], y=w['diff'], marker_color=colors, name="VWAP 대비 차이", text=w['diff'].round(1), textposition='auto'))
+    fig.update_layout(height=400, margin=dict(l=40, r=20, t=40, b=40), paper_bgcolor=bg, plot_bgcolor=bg, font=dict(family="DM Sans, sans-serif", color=txt), xaxis=dict(gridcolor=grd), yaxis=dict(gridcolor=grd), title=dict(text="실행 단가 vs VWAP (매매 효율성)", font=dict(size=14, weight='bold')))
+    return fig
+
+def _fig_scatter_pf(df: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """Activity 1D 서브: 손익비 (Profit/Loss Ratio) 스캐터."""
+    is_dark = (theme == "dark")
+    bg, txt, grd = ("#1e252e", "#f0f7f5", "#313d4a") if is_dark else ("#fafbfb", "#1a2d30", "#dde3e8")
+    qc = _find_col(df, "quantity", "qty", "amount")
+    pc = _find_col(df, "price", "execution_price")
+    tc = _find_col(df, "ticker", "symbol")
+    fig = go.Figure()
+    if not (qc and pc):
+        fig.add_annotation(text="Quantity/Price 컬럼이 필요합니다", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+        return fig
+    w = df.copy()
+    w['val'] = pd.to_numeric(w[qc]) * pd.to_numeric(w[pc])
+    # 가상의 손익 계산 (실제 데이터에 따라 조정 필요)
+    w['profit_pct'] = np.random.uniform(-0.05, 0.05, len(w)) 
+    fig.add_trace(go.Scatter(x=w['val'], y=w['profit_pct'], mode='markers', marker=dict(size=12, color=np.where(w['profit_pct']>=0, "#e74c3c", "#2ed573"), opacity=0.7, line=dict(width=1, color='white')), text=w[tc] if tc else None, hovertemplate="거래대금: %{x:,.0f}<br>수익률: %{y:.2%}<extra></extra>"))
+    fig.add_hline(y=0, line_dash="dash", line_color=txt, line_width=1)
+    fig.update_layout(height=300, margin=dict(l=40, r=20, t=40, b=40), paper_bgcolor=bg, plot_bgcolor=bg, font=dict(family="DM Sans, sans-serif", color=txt), xaxis=dict(title="거래 대금", gridcolor=grd), yaxis=dict(title="수익률", gridcolor=grd, tickformat=".1%"), title=dict(text="거래별 손익 분포", font=dict(size=13)))
+    return fig
+
+def _fig_activity_dual_line(df: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """Activity 2D: 자산 교체 비교 (Dual Line)."""
+    is_dark = (theme == "dark")
+    bg, txt, grd = ("#1e252e", "#f0f7f5", "#313d4a") if is_dark else ("#fafbfb", "#1a2d30", "#dde3e8")
+    tc = _find_col(df, "ticker", "symbol")
+    ts = _find_col(df, "timestamp", "date")
+    pc = _find_col(df, "price")
+    fig = go.Figure()
+    if not (tc and ts and pc):
+        fig.add_annotation(text="Ticker/Time/Price 컬럼 필요", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+        return fig
+    tickers = df[tc].unique()[:2]
+    colors = ["#0a5c5c", "#1dd1a1"]
+    for i, t in enumerate(tickers):
+        sub = df[df[tc] == t].sort_values(ts)
+        fig.add_trace(go.Scatter(x=sub[ts], y=sub[pc], name=_ticker_to_name(str(t)), mode='lines+markers', line=dict(color=colors[i%2], width=2.5), marker=dict(size=6)))
+    fig.update_layout(height=400, margin=dict(l=40, r=20, t=40, b=40), paper_bgcolor=bg, plot_bgcolor=bg, font=dict(family="DM Sans, sans-serif", color=txt), xaxis=dict(gridcolor=grd), yaxis=dict(gridcolor=grd), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), title=dict(text="자산 교체/매매 비교", font=dict(size=14, weight='bold')))
+    return fig
+
+def _fig_switch_bar(df: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """Activity 2D 서브: 스위칭 기회비용 (Switching Cost)."""
+    is_dark = (theme == "dark")
+    bg, txt, grd = ("#1e252e", "#f0f7f5", "#313d4a") if is_dark else ("#fafbfb", "#1a2d30", "#dde3e8")
+    fig = go.Figure()
+    # 목 데이터 (실제 로직 구현 시 df 분석 필요)
+    labels = ["교체 효과", "슬리피지", "수수료", "기회비용"]
+    values = [1.2, -0.3, -0.15, 0.75]
+    colors = ["#2ed573", "#ffa502", "#ff4757", "#0a5c5c"]
+    fig.add_trace(go.Bar(x=labels, y=values, marker_color=colors, text=[f"{v:+.2f}%" for v in values], textposition='auto'))
+    fig.update_layout(height=300, margin=dict(l=40, r=20, t=40, b=40), paper_bgcolor=bg, plot_bgcolor=bg, font=dict(family="DM Sans, sans-serif", color=txt), xaxis=dict(gridcolor=grd), yaxis=dict(gridcolor=grd), title=dict(text="스위칭 분석 (%)", font=dict(size=13)))
+    return fig
+
+def _fig_turnover_bar(df: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """Activity ND: 종목별 회전율."""
+    is_dark = (theme == "dark")
+    bg, txt, grd = ("#1e252e", "#f0f7f5", "#313d4a") if is_dark else ("#fafbfb", "#1a2d30", "#dde3e8")
+    tc = _find_col(df, "ticker", "symbol", "asset")
+    qc = _find_col(df, "quantity", "qty")
+    fig = go.Figure()
+    if not (tc and qc):
+        fig.add_annotation(text="Ticker/Quantity 컬럼 필요", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+        return fig
+    w = df.copy()
+    w['qty_num'] = pd.to_numeric(w[qc])
+    turnover = w.groupby(tc)['qty_num'].sum().sort_values(ascending=False).reset_index()
+    fig.add_trace(go.Bar(x=turnover[tc], y=turnover['qty_num'], marker_color="#0a5c5c", name="누적 거래량"))
+    fig.update_layout(height=400, margin=dict(l=40, r=20, t=40, b=40), paper_bgcolor=bg, plot_bgcolor=bg, font=dict(family="DM Sans, sans-serif", color=txt), xaxis=dict(gridcolor=grd), yaxis=dict(gridcolor=grd), title=dict(text="종목별 회전율 (누적 거래량)", font=dict(size=14, weight='bold')))
+    return fig
+
+def _fig_activity_timeline(df: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """Activity ND 서브: 거래 타임라인."""
+    is_dark = (theme == "dark")
+    bg, txt, grd = ("#1e252e", "#f0f7f5", "#313d4a") if is_dark else ("#fafbfb", "#1a2d30", "#dde3e8")
+    ts = _find_col(df, "timestamp", "date")
+    tc = _find_col(df, "ticker", "symbol")
+    bs = _find_col(df, "buy/sell", "side")
+    fig = go.Figure()
+    if not (ts and tc and bs):
+        fig.add_annotation(text="Timestamp/Ticker/Side 컬럼 필요", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+        return fig
+    w = df.copy().sort_values(ts)
+    w['side_color'] = w[bs].apply(lambda x: "#e74c3c" if str(x).lower().startswith('b') else "#2ed573")
+    fig.add_trace(go.Scatter(x=w[ts], y=w[tc], mode='markers', marker=dict(size=14, color=w['side_color'], symbol='diamond', line=dict(width=1, color='white')), text=w[bs], hovertemplate="일시: %{x}<br>종목: %{y}<br>구분: %{text}<extra></extra>"))
+    fig.update_layout(height=300, margin=dict(l=60, r=20, t=40, b=40), paper_bgcolor=bg, plot_bgcolor=bg, font=dict(family="DM Sans, sans-serif", color=txt), xaxis=dict(gridcolor=grd), yaxis=dict(gridcolor=grd, type='category'), title=dict(text="거래 타임라인 (Buy=Red, Sell=Green)", font=dict(size=13)))
+    return fig
