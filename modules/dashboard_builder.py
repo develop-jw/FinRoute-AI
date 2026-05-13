@@ -104,7 +104,51 @@ SIDEBAR_BRAND_HTML = """
 </div>
 """
 
-# 한국 주요 종목 코드 → 종목명 매핑
+_TICKER_NAME: dict[str, str] = {
+    "005930": "삼성전자",
+    "000660": "SK하이닉스",
+    "035420": "NAVER",
+    "005380": "현대차",
+    "051910": "LG화학",
+    "000270": "기아",
+    "068270": "셀트리온",
+    "207940": "삼성바이오로직스",
+    "006400": "삼성SDI",
+    "035720": "카카오",
+    "003550": "LG",
+    "028260": "삼성물산",
+    "066570": "LG전자",
+    "096770": "SK이노베이션",
+    "017670": "SK텔레콤",
+    "030200": "KT",
+    "055550": "신한지주",
+    "105560": "KB금융",
+    "086790": "하나금융지주",
+    "316140": "우리금융지주",
+    "032830": "삼성생명",
+    "003490": "대한항공",
+    "011200": "HMM",
+    "009150": "삼성전기",
+    "012330": "현대모비스",
+}
+
+
+def _ticker_to_name(ticker: str) -> str:
+    """ticker 코드를 종목명으로 변환. 매핑 없으면 ticker 그대로 반환."""
+    key = str(ticker).zfill(6) if str(ticker).isdigit() and len(str(ticker)) < 6 else str(ticker)
+    return _TICKER_NAME.get(key, key)
+
+
+def _find_col(df: pd.DataFrame, *cands: str) -> str | None:
+    lower = {str(c).lower().replace(" ", "_"): c for c in df.columns}
+    for cand in cands:
+        k = cand.lower()
+        if k in lower:
+            return lower[k]
+        for lk, orig in lower.items():
+            if k in lk:
+                return orig
+    return None
 
 THEME_CSS = """
 <style>
@@ -256,98 +300,6 @@ h1, h2, h3, h4, h5 { color: var(--sq-text) !important; letter-spacing: -0.02em; 
 </style>
 """
 
-def dimension_pills_html(dimension: str | None) -> str:
-    labs = ["1D", "2D", "ND"]
-    parts: list[str] = []
-    for lab in labs:
-        active = dimension is not None and lab == dimension
-        cls = "sq-dim-pill sq-dim-pill--active" if active else "sq-dim-pill sq-dim-pill--idle"
-        parts.append(f'<span class="{cls}">{html.escape(lab)}</span>')
-    label = '<p class="sq-nav-label" style="margin-top:0">Data Dimension</p>'
-    return f"{label}<div class=\"sq-dim-row\">{''.join(parts)}</div>"
-
-SIDEBAR_ICON_DASHBOARD = """
-<div class="sq-sb-nav-ic" title="대시보드">
-<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <path d="M4 5h8v8H4V5zm12 0h4v4h-4V5zm0 6h4v8h-4v-8zM4 15h8v4H4v-4z" stroke="#0a5c5c" stroke-width="1.5" fill="rgba(10,92,92,0.12)" stroke-linejoin="round"/>
-</svg></div>
-"""
-
-SIDEBAR_ICON_HOME = """
-<div class="sq-sb-nav-ic" title="Home">
-<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1V9.5z" stroke="#0a5c5c" stroke-width="1.5" fill="rgba(10,92,92,0.1)" stroke-linejoin="round"/>
-  <path d="M9 21V12h6v9" stroke="#0a5c5c" stroke-width="1.5" stroke-linecap="round"/>
-</svg></div>
-"""
-
-SIDEBAR_ICON_ENGINE = """
-<div class="sq-sb-nav-ic" title="분석 엔진">
-<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="#0a5c5c" stroke-width="1.5" fill="rgba(10,92,92,0.1)"/>
-  <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00-.33 1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852 1 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="#0a5c5c" stroke-width="1.15" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-</svg></div>
-"""
-
-SIDEBAR_BRAND_HTML = """
-<div class="sq-sb-brand">
-  <div class="sq-sb-logo-row">
-    <div class="sq-sb-logo-mark" aria-hidden="true"></div>
-    <div>
-      <div class="sq-sb-logo-text">FinRoute <span>AI</span></div>
-      <div class="sq-sb-logo-sub">Portfolio intelligence</div>
-    </div>
-  </div>
-</div>
-"""
-
-_TICKER_NAME: dict[str, str] = {
-    "005930": "삼성전자",
-    "000660": "SK하이닉스",
-    "035420": "NAVER",
-    "005380": "현대차",
-    "051910": "LG화학",
-    "000270": "기아",
-    "068270": "셀트리온",
-    "207940": "삼성바이오로직스",
-    "006400": "삼성SDI",
-    "035720": "카카오",
-    "003550": "LG",
-    "028260": "삼성물산",
-    "066570": "LG전자",
-    "096770": "SK이노베이션",
-    "017670": "SK텔레콤",
-    "030200": "KT",
-    "055550": "신한지주",
-    "105560": "KB금융",
-    "086790": "하나금융지주",
-    "316140": "우리금융지주",
-    "032830": "삼성생명",
-    "003490": "대한항공",
-    "011200": "HMM",
-    "009150": "삼성전기",
-    "012330": "현대모비스",
-}
-
-
-def _ticker_to_name(ticker: str) -> str:
-    """ticker 코드를 종목명으로 변환. 매핑 없으면 ticker 그대로 반환."""
-    key = str(ticker).zfill(6) if str(ticker).isdigit() and len(str(ticker)) < 6 else str(ticker)
-    return _TICKER_NAME.get(key, key)
-
-
-
-def _find_col(df: pd.DataFrame, *cands: str) -> str | None:
-    lower = {str(c).lower().replace(" ", "_"): c for c in df.columns}
-    for cand in cands:
-        k = cand.lower()
-        if k in lower:
-            return lower[k]
-        for lk, orig in lower.items():
-            if k in lk:
-                return orig
-    return None
-
 def _detect_events(
     df: pd.DataFrame, classify_result: dict, indicator_result: dict
 ) -> list[dict[str, Any]]:
@@ -475,7 +427,7 @@ def _detect_events(
             events.append({"date": "latest", "label": "단타 매매 감지", "kind": "warn", "color": "#b54708"})
 
     return events
-
+    
 _GOAL_META = {
     "goal_trend": ("추세", "시계열 방향성·모멘텀"),
     "goal_comp": ("구성", "자산 간 비중·기여 비교"),
@@ -715,8 +667,6 @@ def _hero_row_html(
   </div>
 </div>
 """
-
-from plotly.subplots import make_subplots
 
 def _fig_candlestick(df: pd.DataFrame) -> go.Figure:
     dc = _find_col(df, "date", "datetime", "time", "timestamp")
@@ -1285,7 +1235,7 @@ def _render_home_charts(mkt_data: list, theme: str = "light") -> None:
             is_sel = name in selected
             safe   = name.replace(" ", "_").replace("/", "_")
             price_str = (
-                f"{price:,.0f}" if name in ("KOSPI", "USD/KRW", "Nikkei 225")
+                f"{price:,.0f}" if name in ("KOSPI", "USD/KRW", "Nikkei 225") and price is not None
                 else f"{price:,.2f}" if price is not None
                 else "—"
             )
@@ -1330,72 +1280,140 @@ def _render_home_charts(mkt_data: list, theme: str = "light") -> None:
                         st.session_state.selected_indices = selected + [name]
                     st.rerun()
 
+def _calculate_trading_bias(df: pd.DataFrame, classify_result: dict, indicator_result: dict) -> tuple[int, str, str]:
+    """클래스별 지표를 종합하여 Score(0~100%)와 라벨을 반환합니다."""
+    ct = classify_result.get("class_type", "TimeSeries")
+    ir = indicator_result or {}
 
-
-def _calculate_trading_bias(df: pd.DataFrame) -> tuple[int, str, str]:
-    """10개의 기술적 지표를 앙상블하여 Trading Bias(0~100%)와 라벨을 반환합니다."""
-    if df is None or df.empty: return 50, "Neutral", "var(--sq-warn)"
-    
-    dc = _find_col(df, "date", "datetime")
-    cc = _find_col(df, "close")
-    if not cc: return 50, "Neutral", "var(--sq-warn)"
-
-    w = df.sort_values(dc) if dc else df.copy()
-    close = pd.to_numeric(w[cc], errors="coerce").ffill()
-    
-    # 데이터가 부족하면 기본값 반환
-    if len(close) < 60: return 50, "Neutral", "var(--sq-warn)"
-
-    score, max_score = 0, 10
-    c_last = close.iloc[-1]
-
-    try:
-        # 1. 단기 추세: 현재가 > MA20
-        if c_last > close.rolling(20).mean().iloc[-1]: score += 1
-        # 2. 장기 추세: 현재가 > MA60
-        if c_last > close.rolling(60).mean().iloc[-1]: score += 1
-        # 3. 배열 상태: MA20 > MA60 (정배열)
-        if close.rolling(20).mean().iloc[-1] > close.rolling(60).mean().iloc[-1]: score += 1
+    if ct == "TimeSeries":
+        if df is None or df.empty: return 50, "Neutral", "var(--sq-warn)"
         
-        # 4. 모멘텀: RSI(14) > 50
-        dlt = close.diff()
-        g = dlt.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
-        l = (-dlt.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
-        rs = g / l.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
-        if rsi.iloc[-1] > 50: score += 1
-        
-        # 5. MACD 오실레이터: MACD > 0
-        ema12 = close.ewm(span=12, adjust=False).mean()
-        ema26 = close.ewm(span=26, adjust=False).mean()
-        macd = ema12 - ema26
-        if macd.iloc[-1] > 0: score += 1
-        # 6. MACD 시그널 돌파: MACD > Signal(9)
-        if macd.iloc[-1] > macd.ewm(span=9, adjust=False).mean().iloc[-1]: score += 1
-        
-        # 7. 단기 과열: 현재가 > MA5
-        if c_last > close.rolling(5).mean().iloc[-1]: score += 1
-        # 8. 주간 수익: 5일 전 대비 상승
-        if c_last > close.iloc[-6]: score += 1
-        # 9. 일간 수익: 전일 대비 상승
-        if c_last > close.iloc[-2]: score += 1
+        dc = _find_col(df, "date", "datetime")
+        cc = _find_col(df, "close")
+        if not cc: return 50, "Neutral", "var(--sq-warn)"
 
-        # 10. 거래량 활성: 현재 거래량 > MA20 거래량
-        vc = _find_col(df, "volume")
-        if vc:
-            vol = pd.to_numeric(w[vc], errors="coerce").fillna(0)
-            if vol.iloc[-1] > vol.rolling(20).mean().iloc[-1]: score += 1
-        else:
-            max_score -= 1 # 거래량 컬럼이 없으면 9점 만점으로 조정
+        w = df.sort_values(dc) if dc else df.copy()
+        close = pd.to_numeric(w[cc], errors="coerce").ffill()
+        
+        if len(close) < 60: return 50, "Neutral", "var(--sq-warn)"
+
+        score, max_score = 0, 10
+        c_last = close.iloc[-1]
+
+        try:
+            if c_last > close.rolling(20).mean().iloc[-1]: score += 1
+            if c_last > close.rolling(60).mean().iloc[-1]: score += 1
+            if close.rolling(20).mean().iloc[-1] > close.rolling(60).mean().iloc[-1]: score += 1
             
-    except Exception:
-        pass
+            dlt = close.diff()
+            g = dlt.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
+            l = (-dlt.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
+            rs = g / l.replace(0, np.nan)
+            rsi = 100 - (100 / (1 + rs))
+            if rsi.iloc[-1] > 50: score += 1
+            
+            ema12 = close.ewm(span=12, adjust=False).mean()
+            ema26 = close.ewm(span=26, adjust=False).mean()
+            macd = ema12 - ema26
+            if macd.iloc[-1] > 0: score += 1
+            if macd.iloc[-1] > macd.ewm(span=9, adjust=False).mean().iloc[-1]: score += 1
+            
+            if c_last > close.rolling(5).mean().iloc[-1]: score += 1
+            if c_last > close.iloc[-6]: score += 1
+            if c_last > close.iloc[-2]: score += 1
 
-    # 최종 점수 환산 및 컬러 배정
-    pct = int((score / max_score) * 100)
-    if pct >= 60: return pct, "Bullish", "var(--sq-mint)"
-    if pct <= 40: return pct, "Bearish", "var(--sq-danger)"
-    return pct, "Neutral", "var(--sq-warn)"
+            vc = _find_col(df, "volume")
+            if vc:
+                vol = pd.to_numeric(w[vc], errors="coerce").fillna(0)
+                if vol.iloc[-1] > vol.rolling(20).mean().iloc[-1]: score += 1
+            else:
+                max_score -= 1
+                
+        except Exception:
+            pass
+
+        pct = int((score / max_score) * 100)
+        if pct >= 60: return pct, "Bullish", "var(--sq-mint)"
+        if pct <= 40: return pct, "Bearish", "var(--sq-danger)"
+        return pct, "Neutral", "var(--sq-warn)"
+
+    elif ct == "Static":
+        score, max_score = 0, 10
+        hhi = ir.get("HHI")
+        if hhi is not None:
+            if hhi < 1000: score += 3
+            elif hhi < 1500: score += 2
+            elif hhi < 2500: score += 1
+        else:
+            max_score -= 3
+            
+        ret = ir.get("cum_return") or ir.get("recent_return")
+        if ret is not None:
+            if ret > 0.05: score += 3
+            elif ret > 0.0: score += 2
+            elif ret > -0.05: score += 1
+        else:
+            max_score -= 3
+            
+        top3 = ir.get("top3_conc")
+        if top3 is not None:
+            if top3 < 0.4: score += 2
+            elif top3 < 0.6: score += 1
+        else:
+            max_score -= 2
+            
+        eff_n = ir.get("eff_n")
+        if eff_n is not None:
+            if eff_n >= 5: score += 2
+            elif eff_n >= 3: score += 1
+        else:
+            max_score -= 2
+            
+        if max_score == 0: return 50, "Neutral", "var(--sq-warn)"
+        pct = int((score / max_score) * 100)
+        if pct >= 60: return pct, "Healthy", "var(--sq-mint)"
+        if pct <= 40: return pct, "Unbalanced", "var(--sq-danger)"
+        return pct, "Neutral", "var(--sq-warn)"
+
+    elif ct == "Activity":
+        score, max_score = 0, 10
+        vwap = ir.get("vwap_dev")
+        if vwap is not None:
+            if vwap > 0.01: score += 3
+            elif vwap > 0.0: score += 2
+            elif vwap > -0.01: score += 1
+        else:
+            max_score -= 3
+            
+        pf = ir.get("profit_factor")
+        if pf is not None:
+            if pf >= 1.2: score += 3
+            elif pf >= 1.0: score += 2
+            elif pf > 0.8: score += 1
+        else:
+            max_score -= 3
+            
+        wr = ir.get("win_rate")
+        if wr is not None:
+            if wr >= 0.55: score += 2
+            elif wr >= 0.45: score += 1
+        else:
+            max_score -= 2
+            
+        np_val = ir.get("net_profit") or ir.get("realized_pnl")
+        if np_val is not None:
+            if np_val > 0: score += 2
+            elif np_val > -10000: score += 1
+        else:
+            max_score -= 2
+            
+        if max_score == 0: return 50, "Neutral", "var(--sq-warn)"
+        pct = int((score / max_score) * 100)
+        if pct >= 60: return pct, "Efficient", "var(--sq-mint)"
+        if pct <= 40: return pct, "Inefficient", "var(--sq-danger)"
+        return pct, "Neutral", "var(--sq-warn)"
+
+    return 50, "Neutral", "var(--sq-warn)"
 
 def build(
     view: str,
@@ -1515,27 +1533,24 @@ def build(
             icon = '✦' if on else '○'
             goals_html += f'<span class="sq-goal-chip {"sq-goal-on" if on else "sq-goal-off" }"><span style="font-size:0.7rem">{icon}</span> {title}</span>'
 
-        if classify_result["class_type"] == "TimeSeries":
-            pct, label, color = _calculate_trading_bias(df)
-            deg = 180 * (pct / 100)
-            bias_html = f'''
-            <div style="position:relative; width:160px; height:80px; overflow:hidden; margin: 15px auto 5px;">
-                <div style="position:absolute; bottom:0; left:0; width:160px; height:80px; border-radius: 160px 160px 0 0; background: conic-gradient(from 270deg, {color} 0deg, {color} {deg}deg, rgba(128,128,128,0.15) {deg}deg, rgba(128,128,128,0.15) 180deg);">
-                    <div style="position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:128px; height:64px; border-radius: 128px 128px 0 0; background: var(--sq-surface);"></div>
-                </div>
+        pct, label, color = _calculate_trading_bias(df, classify_result, indicator_result)
+        deg = 180 * (pct / 100)
+        bias_html = f'''
+        <div style="position:relative; width:160px; height:80px; overflow:hidden; margin: 15px auto 5px;">
+            <div style="position:absolute; bottom:0; left:0; width:160px; height:80px; border-radius: 160px 160px 0 0; background: conic-gradient(from 270deg at 50% 100%, {color} 0deg, {color} {deg}deg, rgba(128,128,128,0.15) {deg}deg, rgba(128,128,128,0.15) 180deg);">
+                <div style="position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:128px; height:64px; border-radius: 128px 128px 0 0; background: var(--sq-surface);"></div>
             </div>
-            <div style="text-align:center; padding-bottom:10px;">
-                <div style="font-size:2rem; font-weight:800; color:{color}; line-height:1;">{pct}%</div>
-                <div style="font-size:0.85rem; font-weight:700; color:{color}; letter-spacing:0.05em; text-transform:uppercase; margin-top:4px;">{label}</div>
-            </div>
-            '''
-        else:
-            bias_html = '<p style="font-size:0.82rem;color:var(--sq-muted);text-align:center;margin:20px 0;">시계열 데이터 전용</p>'
+        </div>
+        <div style="text-align:center; padding-bottom:10px;">
+            <div style="font-size:2rem; font-weight:800; color:{color}; line-height:1;">{pct}%</div>
+            <div style="font-size:0.85rem; font-weight:700; color:{color}; letter-spacing:0.05em; text-transform:uppercase; margin-top:4px;">{label}</div>
+        </div>
+        '''
 
         st.markdown(
             f'<div class="sq-rail"><div class="sq-rail-section"><div class="sq-rail-title">① Auto Events</div><div class="sq-feed-scroll">{feed_items}</div></div>'
             f'<div class="sq-rail-section" style="margin-top:16px"><div class="sq-rail-title">② Analysis Goals</div><div style="display:flex;flex-wrap:wrap;gap:4px;line-height:2">{goals_html}</div></div>'
-            f'<div class="sq-rail-section" style="margin-top:16px"><div class="sq-rail-title">③ Trading Bias</div>{bias_html}</div></div>',
+            f'<div class="sq-rail-section" style="margin-top:16px"><div class="sq-rail-title">③ Analysis Score</div>{bias_html}</div></div>',
             unsafe_allow_html=True,
         )
 
@@ -1682,12 +1697,6 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
 
             # 서브 차트 — 식별자 기반 라우팅
             subs = chart_result.get("sub_charts") or []
-            if ("excess_bar" in subs or "weight_drift_bar" in subs) and not _find_col(df, "target_weight"):
-                subs = [s for s in subs if s not in ["excess_bar", "weight_drift_bar"]]
-
-            # 필터링 2: 구현된 서브 차트만 남기기
-                supported_subs = ["rsi", "zscore", "rolling_corr", "network", "excess_bar", "weight_drift_bar", "scatter_pf", "switch_bar", "timeline"]
-                subs = [s for s in subs if s in supported_subs]
 
             def _render_sub(sub_id: str) -> None:
                 if sub_id == "rsi":
@@ -1709,7 +1718,7 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
                 elif sub_id == "timeline":
                     st.plotly_chart(_fig_activity_timeline(df, theme=theme), use_container_width=True)
                 else:
-                    pass
+                    st.caption(f"서브 차트 준비 중: {sub_id}")
 
             if len(subs) >= 2:
                 s1, s2 = st.columns(2)
@@ -1743,7 +1752,6 @@ def _render_news(query: str) -> str:
     rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
     
     feed = feedparser.parse(rss_url)
-    # ... (이후 코드는 동일)
     
     news_html = ""
     # 상위 5개 뉴스 추출
@@ -1757,11 +1765,10 @@ def _render_news(query: str) -> str:
         )
     return news_html
 
-def _get_dynamic_query(classify_result: dict, indicator_result: dict, df: pd.DataFrame): # df 추가!
+def _get_dynamic_query(classify_result: dict, indicator_result: dict, df: pd.DataFrame): 
     ct = classify_result.get("class_type")
     
     if ct == "TimeSeries":
-        # 여기서 df를 사용하기 때문에 인자에 df가 반드시 있어야 합니다.
         close_col = _find_col(df, "close") 
         if close_col and df[close_col].mean() < 1000:
             return "미국 증시 나스닥 시황"
