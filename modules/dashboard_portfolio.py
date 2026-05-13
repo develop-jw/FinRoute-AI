@@ -17,27 +17,31 @@ def dashboard_portfolio(
     st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
     
     if dim == "1D":
-        st.plotly_chart(_fig_portfolio_1d_main(df, theme), use_container_width=True, key="pf_1d_main")
-        st.plotly_chart(_fig_portfolio_1d_sub(df, theme), use_container_width=True, key="pf_1d_sub")
+        if "return" in df.columns:
+            st.plotly_chart(_fig_portfolio_1d_main(df, theme), use_container_width=True, key="pf_1d_main")
+            st.plotly_chart(_fig_portfolio_1d_sub(df, theme), use_container_width=True, key="pf_1d_sub")
+        else:
+            st.info("1D 분석을 위한 수익률(return) 데이터가 없습니다.")
     elif dim == "2D":
-        # 개별 종목별 렌더링
-        assets = df["asset_name"].unique()
-        for i, asset in enumerate(assets):
-            sub_df = df[df["asset_name"] == asset]
-            st.plotly_chart(_fig_portfolio_2d_individual(sub_df, asset, theme), use_container_width=True, key=f"pf_2d_main_{i}")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(_fig_portfolio_2d_sub1(df, theme), use_container_width=True, key="pf_2d_sub1")
-        with col2:
-            st.plotly_chart(_fig_portfolio_2d_sub2(df, theme), use_container_width=True, key="pf_2d_sub2")
+        if "return" in df.columns:
+            st.plotly_chart(_fig_portfolio_2d_main(df, theme), use_container_width=True, key="pf_2d_main")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.plotly_chart(_fig_portfolio_2d_sub1(df, theme), use_container_width=True, key="pf_2d_sub1")
+            with col2:
+                st.plotly_chart(_fig_portfolio_2d_sub2(df, theme), use_container_width=True, key="pf_2d_sub2")
+        else:
+            st.info("2D 비교 분석을 위한 데이터가 부족합니다.")
     elif dim == "ND":
-        st.plotly_chart(_fig_portfolio_nd_main(df, theme), use_container_width=True, key="pf_nd_main")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(_fig_portfolio_nd_sub1(df, theme), use_container_width=True, key="pf_nd_sub1")
-        with col2:
-            st.plotly_chart(_fig_portfolio_nd_sub2(df, theme), use_container_width=True, key="pf_nd_sub2")
+        if "weight" in df.columns:
+            st.plotly_chart(_fig_portfolio_nd_main(df, theme), use_container_width=True, key="pf_nd_main")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.plotly_chart(_fig_portfolio_nd_sub1(df, theme), use_container_width=True, key="pf_nd_sub1")
+            with col2:
+                st.plotly_chart(_fig_portfolio_nd_sub2(df, theme), use_container_width=True, key="pf_nd_sub2")
+        else:
+            st.info("ND 자산 구성 분석을 위한 데이터가 부족합니다.")
 
 # 수정된 2D 함수
 def _fig_portfolio_2d_individual(df, asset_name, theme):
