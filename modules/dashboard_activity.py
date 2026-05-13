@@ -20,13 +20,22 @@ def dashboard_activity(
 
     st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
     if dim == "1D":
-        # LightWeightCharts 스타일로 1D Activity 차트 렌더링
-        # _render_lightweight_chart 사용을 위해 데이터를 포맷팅
-        df_chart = df.copy()
-        # 데이터프레임 컬럼을 맞춤 (date, close, vwap, side 등)
-        _render_activity_lightweight(df_chart, theme=theme)
+        _render_activity_lightweight(df.copy(), theme=theme)
     elif dim == "2D":
-        st.plotly_chart(_fig_activity_dual_line(df, theme=theme), use_container_width=True)
+        tc = _find_col(df, "ticker", "symbol", "code", "asset")
+        if tc:
+            tickers = sorted(df[tc].unique())
+            selected_tickers = st.multiselect("종목 선택 (최대 2개)", tickers, default=tickers[:2])
+            
+            if len(selected_tickers) == 1:
+                sub_df = df[df[tc] == selected_tickers[0]].copy()
+                _render_activity_lightweight(sub_df, theme=theme)
+            elif len(selected_tickers) == 2:
+                st.plotly_chart(_fig_activity_dual_line(df[df[tc].isin(selected_tickers)], theme=theme), use_container_width=True)
+            else:
+                st.info("종목을 1개 또는 2개 선택해주세요.")
+        else:
+            st.plotly_chart(_fig_activity_dual_line(df, theme=theme), use_container_width=True)
     elif dim == "ND":
         st.plotly_chart(_fig_turnover_bar(df, theme=theme), use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -57,7 +66,13 @@ def _render_activity_lightweight(df: pd.DataFrame, theme: str = "light"):
     grid_color = "#313d4a" if is_dark else "#eeeeee"
 
     chart_data = w.rename(columns={'date':'time', 'open':'open', 'high':'high', 'low':'low', 'close':'close'})
-    vwap_data = w.rename(columns={'date':'time', vc:'value'})
+    
+    # VWAP 데이터 이름 바꾸기 (컬럼이 존재할 때만)
+    if vc and vc in w.columns:
+        vwap_data = w.rename(columns={'date':'time', vc:'value'})
+    else:
+        vwap_data = w.rename(columns={'date':'time'})
+        vwap_data['value'] = 0
 
     price_chart_options = {
         "layout": {"background": {"color": bg_color}, "textColor": text_color},
@@ -67,9 +82,12 @@ def _render_activity_lightweight(df: pd.DataFrame, theme: str = "light"):
 
     series = [
         {"type": 'Candlestick', "data": chart_data[['time', 'open', 'high', 'low', 'close']].to_dict('records'), 
-         "options": {"upColor": "#2ed573", "downColor": "#e74c3c", "borderDownColor": "#e74c3c", "borderUpColor": "#2ed573", "wickDownColor": "#e74c3c", "wickUpColor": "#2ed573"}},
-        {"type": 'Line', "data": vwap_data[['time', 'value']].to_dict('records'), 
-         "options": {"color": "#f1c40f", "lineWidth": 2, "lineStyle": 2, "title": "VWAP"}}
+         "options": {"upColor": "#2ed573", "downColor": "#e74c3c", "borderDownColor": "#e74c3c", "borderUpColor": "#2ed573", "wickDownColor": "#e74c3c", "wickUpColor": "#2ed573"}}
     ]
+    
+    # VWAP 데이터가 있을 때만 선 추가
+    if vc and vc in w.columns:
+        series.append({"type": 'Line', "data": vwap_data[['time', 'value']].to_dict('records'), 
+                       "options": {"color": "#f1c40f", "lineWidth": 2, "lineStyle": 2, "title": "VWAP"}})
 
     renderLightweightCharts([{"chart": price_chart_options, "series": series}], 'activity_chart')
