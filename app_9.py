@@ -22,6 +22,26 @@ st.markdown(THEME_CSS, unsafe_allow_html=True)
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
+def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """한글 컬럼명을 영어로 변환."""
+    col_map = {
+        "날짜": "date", "일자": "date", "기준일": "date", "거래일": "date",
+        "종가": "close", "현재가": "close", "가격": "price",
+        "시가": "open", "고가": "high", "저가": "low",
+        "거래량": "volume", "거래대금": "trading_value",
+        "비중": "weight", "투자비중": "weight", "보유비중": "weight",
+        "수익률": "return", "수익": "return", "손익률": "return",
+        "자산명": "asset_name", "자산": "asset_name", "종목명": "asset_name",
+        "분기": "quarter", "기간": "quarter",
+        "티커": "ticker", "종목코드": "ticker",
+        "매수매도": "side", "구분": "side", "거래구분": "side",
+        "수량": "quantity", "거래수량": "quantity",
+        "수수료": "fee", "거래비용": "fee",
+        "목표비중": "target_weight", "벤치마크비중": "benchmark_weight",
+        "보유금액": "holding_amount", "평가금액": "holding_amount",
+    }
+    return df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+
 # ── 시장 지표 ─────────────────────────────────
 @st.cache_data(ttl=300)
 def _get_market_data() -> list[dict]:
@@ -93,14 +113,14 @@ with st.sidebar:
                 if f.name not in st.session_state.uploaded_files:
                     try:
                         # 파일 인코딩 에러 방지
-                        st.session_state.uploaded_files[f.name] = pd.read_csv(f)
+                        st.session_state.uploaded_files[f.name] = _normalize_columns(pd.read_csv(f))
                     except pd.errors.EmptyDataError:
                         st.error(f"Error: {f.name} is empty.")
                         continue
                     except UnicodeDecodeError:
                         try:
                             f.seek(0)
-                            st.session_state.uploaded_files[f.name] = pd.read_csv(f, encoding='cp949')
+                            st.session_state.uploaded_files[f.name] = _normalize_columns(pd.read_csv(f, encoding='cp949'))
                         except pd.errors.EmptyDataError:
                             st.error(f"Error: {f.name} is empty.")
                             continue
