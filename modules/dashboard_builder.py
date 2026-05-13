@@ -1682,14 +1682,12 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
 
             # 서브 차트 — 식별자 기반 라우팅
             subs = chart_result.get("sub_charts") or []
-            
-            # 필터링 1: target_weight 가 필요한 차트인데 데이터가 없는 경우 제외
             if ("excess_bar" in subs or "weight_drift_bar" in subs) and not _find_col(df, "target_weight"):
                 subs = [s for s in subs if s not in ["excess_bar", "weight_drift_bar"]]
 
             # 필터링 2: 구현된 서브 차트만 남기기
-            supported_subs = ["rsi", "zscore", "rolling_corr", "network", "excess_bar", "weight_drift_bar", "scatter_pf", "switch_bar", "timeline"]
-            subs = [s for s in subs if s in supported_subs]
+                supported_subs = ["rsi", "zscore", "rolling_corr", "network", "excess_bar", "weight_drift_bar", "scatter_pf", "switch_bar", "timeline"]
+                subs = [s for s in subs if s in supported_subs]
 
             def _render_sub(sub_id: str) -> None:
                 if sub_id == "rsi":
