@@ -50,7 +50,7 @@ ANTHROPIC_API_KEY=your_api_key_here
 
 ### 3. 애플리케이션 실행
 ```bash
-streamlit run app.py
+streamlit run app_0.py
 ```
 
 ---
@@ -59,7 +59,7 @@ streamlit run app.py
 
 ```
 FinRoute-AI/
-├── app.py                  # 메인 진입점
+├── app_0.py                  # 메인 진입점
 ├── modules/                # 핵심 분석 모듈
 │   ├── classifier.py       # 데이터 분류 및 벡터 분석
 │   ├── indicator_calculator.py # KPI 계산

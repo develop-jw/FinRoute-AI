@@ -42,7 +42,13 @@ def _render_lightweight_chart(
     show_vol: bool = True
 ) -> None:
     dc = _find_col(df, "date", "datetime")
+    if dc is None:
+        st.error("데이터에 날짜(date) 컬럼이 없습니다.")
+        return
     oc, hc, lc, cc = _find_col(df, "open"), _find_col(df, "high"), _find_col(df, "low"), _find_col(df, "close")
+    if not (oc and hc and lc and cc):
+        st.error("데이터에 필요한 가격 컬럼(open, high, low, close)이 부족합니다.")
+        return
     vc = _find_col(df, "volume")
     tick_col = _find_col(df, "ticker", "symbol", "code", "asset", "asset_name")
     
@@ -113,8 +119,83 @@ def _render_lightweight_chart(
                 sub['senkou_b'] = ((h.rolling(52).max() + l.rolling(52).min()) / 2).shift(26)
                 for col in ['tenkan', 'kijun', 'senkou_a', 'senkou_b']:
                     price_series.append({"type": 'Line', "data": sub[[dc, col]].dropna().rename(columns={dc:'time', col:'value'}).to_dict('records'), "options": {"lineWidth": 1, "title": col.capitalize()}})
+            
+            # MACD
+            if st.session_state.get("show_macd", False) and len(sub) >= 26:
+                close = pd.to_numeric(sub[cc], errors="coerce")
+                exp1 = close.ewm(span=12, adjust=False).mean()
+                exp2 = close.ewm(span=26, adjust=False).mean()
+                macd = exp1 - exp2
+                signal = macd.ewm(span=9, adjust=False).mean()
+                price_series.append({"type": 'Line', "data": sub[[dc, cc]].assign(value=macd).dropna()[[dc, 'value']].rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#ff9ff3", "lineWidth": 1, "title": "MACD"}})
+                price_series.append({"type": 'Line', "data": sub[[dc, cc]].assign(value=signal).dropna()[[dc, 'value']].rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#54a0ff", "lineWidth": 1, "title": "MACD Signal"}})
+
+            # SAR
+            if st.session_state.get("show_psar", False) and len(sub) >= 2:
+                high = pd.to_numeric(sub[hc], errors="coerce")
+                low = pd.to_numeric(sub[lc], errors="coerce")
+                sar = pd.Series(index=sub.index, dtype='float64')
+                af = 0.02
+                ep = high.iloc[0]
+                sar.iloc[0] = low.iloc[0]
+                bull = True
+                for i in range(1, len(sub)):
+                    if bull:
+                        sar.iloc[i] = sar.iloc[i-1] + af * (ep - sar.iloc[i-1])
+                        if high.iloc[i] > ep:
+                            ep = high.iloc[i]
+                            af = min(af + 0.02, 0.2)
+                        if low.iloc[i] < sar.iloc[i]:
+                            bull = False
+                            sar.iloc[i] = ep
+                            ep = low.iloc[i]
+                            af = 0.02
+                    else:
+                        sar.iloc[i] = sar.iloc[i-1] - af * (sar.iloc[i-1] - ep)
+                        if low.iloc[i] < ep:
+                            ep = low.iloc[i]
+                            af = min(af + 0.02, 0.2)
+                        if high.iloc[i] > sar.iloc[i]:
+                            bull = True
+                            sar.iloc[i] = ep
+                            ep = high.iloc[i]
+                            af = 0.02
+                price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=sar).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#feca57", "lineWidth": 0, "lineStyle": 2, "pointMarkers": True, "title": "SAR"}})
+
+            # CCI (14 period)
+            if st.session_state.get("show_cci", False) and len(sub) >= 20:
+                tp = (pd.to_numeric(sub[hc]) + pd.to_numeric(sub[lc]) + pd.to_numeric(sub[cc])) / 3
+                cci = (tp - tp.rolling(20).mean()) / (0.015 * tp.rolling(20).std())
+                price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=cci).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#48dbfb", "lineWidth": 1, "title": "CCI"}})
+
+            # Stochastic (14, 3, 3)
+            if st.session_state.get("show_stoch", False) and len(sub) >= 14:
+                high = pd.to_numeric(sub[hc])
+                low = pd.to_numeric(sub[lc])
+                close = pd.to_numeric(sub[cc])
+                k = 100 * (close - low.rolling(14).min()) / (high.rolling(14).max() - low.rolling(14).min())
+                d = k.rolling(3).mean()
+                price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=k).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#ff9f43", "lineWidth": 1, "title": "Stoch %K"}})
+                price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=d).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#5f27cd", "lineWidth": 1, "title": "Stoch %D"}})
+            
+            # Envelope (20 period, 5% deviation)
+            if st.session_state.get("show_env", False) and len(sub) >= 20:
+                ma = pd.to_numeric(sub[cc]).rolling(20).mean()
+                env_u = ma * 1.05
+                env_l = ma * 0.95
+                price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=env_u).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#778ca3", "lineWidth": 1, "lineStyle": 2, "title": "Env Upper"}})
+                price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=env_l).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#778ca3", "lineWidth": 1, "lineStyle": 2, "title": "Env Lower"}})
+
         if show_vol and vc:
             v_data = sub[[dc, vc]].rename(columns={dc: 'time', vc: 'value'}).to_dict('records')
+            
+            # OBV
+            if st.session_state.get("show_obv", False):
+                close = pd.to_numeric(sub[cc])
+                vol = pd.to_numeric(sub[vc])
+                obv = (np.sign(close.diff()) * vol).fillna(0).cumsum()
+                volume_series.append({"type": 'Line', "data": sub[[dc]].assign(value=obv).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#eb2f06", "lineWidth": 1, "title": "OBV"}})
+
             v_color = color if color else "#0a5c5c"
             if len(tickers) > 1 and v_color.startswith("#"):
                 r, g, b = int(v_color[1:3],16), int(v_color[3:5],16), int(v_color[5:7],16)
