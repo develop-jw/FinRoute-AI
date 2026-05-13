@@ -164,11 +164,17 @@ def classify(df: pd.DataFrame) -> dict[str, Any]:
 
     elif class_type == "Static":
         dashboard = "portfolio"
-        has_benchmark = _has_token(tokens, "benchmark", "target_weight", "bm_")
-        has_hhi_col = any("hhi" in t for t in tokens)
-        if has_hhi_col:
+        # 자산(Ticker) 개수 기반 차원 분류
+        tick_col = None
+        for c, t in rev.items():
+            if t in ("ticker", "symbol", "code", "asset", "asset_name"):
+                tick_col = c
+                break
+        n_tick = int(df[tick_col].nunique()) if tick_col and tick_col in df.columns else 1
+        
+        if n_tick >= 3:
             dimension = "ND"
-        elif has_benchmark:
+        elif n_tick == 2:
             dimension = "2D"
         else:
             dimension = "1D"
