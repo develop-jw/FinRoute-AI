@@ -23,15 +23,12 @@ def dashboard_portfolio(
         else:
             st.info("1D 분석을 위한 수익률(return) 데이터가 없습니다.")
     elif dim == "2D":
-        if "return" in df.columns:
+        has_ret = "return" in df.columns and not df["return"].dropna().empty
+        if has_ret:
             st.plotly_chart(_fig_portfolio_2d_main(df, theme), use_container_width=True, key="pf_2d_main")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.plotly_chart(_fig_portfolio_2d_sub1(df, theme), use_container_width=True, key="pf_2d_sub1")
-            with col2:
-                st.plotly_chart(_fig_portfolio_2d_sub2(df, theme), use_container_width=True, key="pf_2d_sub2")
+            st.plotly_chart(_fig_portfolio_2d_sub2(df, theme), use_container_width=True, key="pf_2d_sub2")
         else:
-            st.info("2D 비교 분석을 위한 데이터가 부족합니다.")
+            st.info("2D 비교 분석을 위한 수익률 데이터가 부족합니다.")
     elif dim == "ND":
         if "weight" in df.columns:
             st.plotly_chart(_fig_portfolio_nd_main(df, theme), use_container_width=True, key="pf_nd_main")
@@ -42,13 +39,6 @@ def dashboard_portfolio(
                 st.plotly_chart(_fig_portfolio_nd_sub2(df, theme), use_container_width=True, key="pf_nd_sub2")
         else:
             st.info("ND 자산 구성 분석을 위한 데이터가 부족합니다.")
-
-# 수정된 2D 함수
-def _fig_portfolio_2d_individual(df, asset_name, theme):
-    df = df.sort_values("quarter")
-    df['cum_ret'] = (1 + df['return']).cumprod() - 1
-    fig = go.Figure(go.Scatter(x=df["quarter"], y=df['cum_ret'], mode='lines', line=dict(color="#0a5c5c", width=3)))
-    return _apply_layout(fig, f"{asset_name} 누적 수익률", theme)
             
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("---")
@@ -98,10 +88,6 @@ def _fig_portfolio_2d_main(df, theme):
     for i, col in enumerate(pivot.columns):
         fig.add_trace(go.Scatter(x=pivot.index, y=pivot[col], mode='lines', name=col, line=dict(color=s["colors"][i%len(s["colors"])], width=2.5)))
     return _apply_layout(fig, "자산별 누적 수익률 비교", theme)
-
-def _fig_portfolio_2d_sub1(df, theme):
-    fig = px.bar(df, x="quarter", y="return", color="asset_name", barmode="group", color_discrete_sequence=_get_theme_styles(theme)["colors"])
-    return _apply_layout(fig, "분기별 자산 수익률", theme)
 
 def _fig_portfolio_2d_sub2(df, theme):
     last_q = df["quarter"].iloc[-1]
