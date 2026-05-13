@@ -177,9 +177,25 @@ def _render_lightweight_chart(
                 d = k.rolling(3).mean()
                 price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=k).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#ff9f43", "lineWidth": 1, "title": "Stoch %K"}})
                 price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=d).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#5f27cd", "lineWidth": 1, "title": "Stoch %D"}})
+            
+            # Envelope (20 period, 5% deviation)
+            if st.session_state.get("show_env", False) and len(sub) >= 20:
+                ma = pd.to_numeric(sub[cc]).rolling(20).mean()
+                env_u = ma * 1.05
+                env_l = ma * 0.95
+                price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=env_u).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#778ca3", "lineWidth": 1, "lineStyle": 2, "title": "Env Upper"}})
+                price_series.append({"type": 'Line', "data": sub[[dc]].assign(value=env_l).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#778ca3", "lineWidth": 1, "lineStyle": 2, "title": "Env Lower"}})
 
         if show_vol and vc:
             v_data = sub[[dc, vc]].rename(columns={dc: 'time', vc: 'value'}).to_dict('records')
+            
+            # OBV
+            if st.session_state.get("show_obv", False):
+                close = pd.to_numeric(sub[cc])
+                vol = pd.to_numeric(sub[vc])
+                obv = (np.sign(close.diff()) * vol).fillna(0).cumsum()
+                volume_series.append({"type": 'Line', "data": sub[[dc]].assign(value=obv).dropna().rename(columns={dc:'time'}).to_dict('records'), "options": {"color": "#eb2f06", "lineWidth": 1, "title": "OBV"}})
+
             v_color = color if color else "#0a5c5c"
             if len(tickers) > 1 and v_color.startswith("#"):
                 r, g, b = int(v_color[1:3],16), int(v_color[3:5],16), int(v_color[5:7],16)
