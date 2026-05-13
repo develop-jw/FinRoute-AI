@@ -13,6 +13,7 @@ import streamlit as st
 import feedparser
 from streamlit_lightweight_charts import renderLightweightCharts
 from .dashboard_timeseries import dashboard_timeseries
+from .dashboard_activity import dashboard_activity
 from .dashboard_utils import _find_col, _ticker_to_name, _render_lightweight_chart, _fig_corr_heatmap
 
 from urllib.parse import quote  # URL 인코딩을 위해 추가
@@ -623,13 +624,25 @@ def _hero_row_html(
 from plotly.subplots import make_subplots
 
 def _fig_candlestick(df: pd.DataFrame) -> go.Figure:
-    dc = _find_col(df, "date", "datetime")
-    oc, hc, lc, cc = _find_col(df, "open"), _find_col(df, "high"), _find_col(df, "low"), _find_col(df, "close")
-    vc = _find_col(df, "volume")
+    dc = _find_col(df, "date", "datetime", "time", "timestamp")
+    # 좀 더 넓은 범위의 후보군 검색
+    oc = _find_col(df, "open", "o")
+    hc = _find_col(df, "high", "h")
+    lc = _find_col(df, "low", "l")
+    cc = _find_col(df, "close", "c", "price", "last")
+    vc = _find_col(df, "volume", "vol", "v")
+    
+    # 일부 컬럼이 없으면 파생 생성 시도 (예: Price만 있고 OHLC가 없으면)
+    if not (oc and hc and lc and cc) and cc:
+        st.warning("일부 OHLC 컬럼이 없어 단일 가격 라인 차트로 대체합니다.")
+        fig = go.Figure(go.Scatter(x=df[dc] if dc else df.index, y=df[cc], mode='lines', name="가격"))
+        fig.update_layout(height=420, margin=dict(l=30, r=20, t=30, b=30))
+        return fig
     
     if not (dc and oc and hc and lc and cc):
         fig = go.Figure()
-        fig.add_annotation(text="OHLC 컬럼이 부족합니다", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+        fig.add_annotation(text=f"필수 OHLC 컬럼을 찾을 수 없습니다.<br>검색된 컬럼: {list(df.columns)}", 
+                           xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
         return fig
     
     w = df.sort_values(dc)
@@ -638,24 +651,17 @@ def _fig_candlestick(df: pd.DataFrame) -> go.Figure:
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
                            vertical_spacing=0.05, 
                            row_heights=[0.7, 0.3])
-        
-        # 가격 차트
         fig.add_trace(go.Candlestick(x=w[dc], open=w[oc], high=w[hc], low=w[lc], close=w[cc], name="가격"), row=1, col=1)
         close = pd.to_numeric(w[cc], errors="coerce")
         fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(20, min_periods=5).mean(), name="MA20", line=dict(color="#2b83ba", width=1)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(60, min_periods=5).mean(), name="MA60", line=dict(color="#fdae61", width=1)), row=1, col=1)
-        
-        # 거래량 차트
         vol = pd.to_numeric(w[vc], errors="coerce")
         colors = ['#2ed573' if w[cc].iloc[i] >= w[oc].iloc[i] else '#e74c3c' for i in range(len(w))]
         fig.add_trace(go.Bar(x=w[dc], y=vol, name="거래량", marker_color=colors), row=2, col=1)
-        
         fig.update_layout(height=600)
     else:
         fig = go.Figure(data=[go.Candlestick(x=w[dc], open=w[oc], high=w[hc], low=w[lc], close=w[cc], name="가격")])
         close = pd.to_numeric(w[cc], errors="coerce")
         fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(20, min_periods=5).mean(), name="MA20", line=dict(color="#2b83ba", width=1)))
-        fig.add_trace(go.Scatter(x=w[dc], y=close.rolling(60, min_periods=5).mean(), name="MA60", line=dict(color="#fdae61", width=1)))
         fig.update_layout(height=420)
 
     fig.update_layout(
@@ -1574,6 +1580,8 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
                 st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
                 st.plotly_chart(_fig_static_dual(df), use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
+            elif ct == "Activity":
+                dashboard_activity(df, classify_result, indicator_result, theme=theme)
             else:
                 st.markdown('<div class="sq-card sq-chart">', unsafe_allow_html=True)
                 st.plotly_chart(_fig_candlestick(df), use_container_width=True)
