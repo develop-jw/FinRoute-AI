@@ -357,9 +357,6 @@ def _detect_events(
 
     if ct == "TimeSeries" and dim == "1D":
         dc = _find_col(df, "date", "datetime")
-        oc = _find_col(df, "open")
-        hc = _find_col(df, "high")
-        lc = _find_col(df, "low")
         cc = _find_col(df, "close")
         if not (dc and cc):
             return events
@@ -367,17 +364,15 @@ def _detect_events(
         close = pd.to_numeric(w[cc], errors="coerce")
         ma20 = close.rolling(20, min_periods=5).mean()
         ma60 = close.rolling(60, min_periods=5).mean()
-        rsi_s = close.copy()
-        dlt = rsi_s.diff()
-        g = dlt.clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean()
-        l = (-dlt.clip(upper=0)).ewm(alpha=1 / 14, adjust=False).mean()
-        rs = g / l.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
+        dlt = close.diff()
+        g = dlt.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
+        l = (-dlt.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
+        rsi = 100 - (100 / (1 + g / l.replace(0, np.nan)))
         for i in range(2, len(w)):
             dt = str(w[dc].iloc[i])
-            if ma20.iloc[i] > ma60.iloc[i] and ma20.iloc[i - 1] <= ma60.iloc[i - 1]:
+            if ma20.iloc[i] > ma60.iloc[i] and ma20.iloc[i-1] <= ma60.iloc[i-1]:
                 events.append({"date": dt, "label": "골든크로스", "kind": "buy", "color": "#1a7f37"})
-            if ma20.iloc[i] < ma60.iloc[i] and ma20.iloc[i - 1] >= ma60.iloc[i - 1]:
+            if ma20.iloc[i] < ma60.iloc[i] and ma20.iloc[i-1] >= ma60.iloc[i-1]:
                 events.append({"date": dt, "label": "데드크로스", "kind": "sell", "color": "#b42318"})
             rv = float(rsi.iloc[i]) if pd.notna(rsi.iloc[i]) else None
             if rv is not None:
@@ -385,17 +380,36 @@ def _detect_events(
                     events.append({"date": dt, "label": "RSI 과매수", "kind": "warn", "color": "#b54708"})
                 elif rv < 30:
                     events.append({"date": dt, "label": "RSI 과매도", "kind": "buy", "color": "#1a7f37"})
-        
         label_first: dict[str, dict] = {}
         for ev in events:
             if ev["label"] not in label_first:
                 label_first[ev["label"]] = ev
         events = sorted(label_first.values(), key=lambda e: e["date"], reverse=True)[:8]
 
+    elif ct == "TimeSeries" and dim == "2D":
+        zscore = indicator_result.get("zscore")
+        if zscore is not None:
+            if zscore > 2:
+                events.append({"date": "latest", "label": "Z-score 과매수", "kind": "sell", "color": "#b42318"})
+            elif zscore < -2:
+                events.append({"date": "latest", "label": "Z-score 과매도", "kind": "buy", "color": "#1a7f37"})
+        roll_corr = indicator_result.get("roll_corr")
+        if roll_corr is not None and roll_corr > 0.9:
+            events.append({"date": "latest", "label": "상관관계 급등", "kind": "warn", "color": "#b54708"})
+
+    elif ct == "TimeSeries" and dim == "ND":
+        avg_corr = indicator_result.get("avg_corr")
+        if avg_corr is not None and avg_corr > 0.7:
+            events.append({"date": "latest", "label": "종목간 상관 급등", "kind": "warn", "color": "#b54708"})
+        var = indicator_result.get("VaR")
+        if var is not None and var < -0.03:
+            events.append({"date": "latest", "label": "VaR 위험 수준", "kind": "sell", "color": "#b42318"})
+
     elif ct == "Static" and dim in ("1D", "2D"):
         qc = _find_col(df, "quarter", "date")
         wc = _find_col(df, "weight")
         tc = _find_col(df, "target_weight")
+        rc = _find_col(df, "return", "returns")
         if qc and wc and tc:
             for _q, part in df.groupby(qc, sort=True):
                 for _, row in part.iterrows():
@@ -408,12 +422,57 @@ def _detect_events(
                 if ev["label"] not in label_first_s:
                     label_first_s[ev["label"]] = ev
             events = sorted(label_first_s.values(), key=lambda e: e["date"], reverse=True)[:8]
+        elif qc and rc:
+            for _q, part in df.groupby(qc, sort=True):
+                rv = pd.to_numeric(part[rc], errors="coerce")
+                avg_ret = float(rv.mean()) if len(rv) > 0 else 0
+                if avg_ret < -0.05:
+                    events.append({"date": str(_q), "label": "수익률 급락", "kind": "sell", "color": "#b42318"})
+                elif avg_ret > 0.10:
+                    events.append({"date": str(_q), "label": "수익률 급등", "kind": "buy", "color": "#1a7f37"})
+            label_first_s2: dict[str, dict] = {}
+            for ev in events:
+                if ev["label"] not in label_first_s2:
+                    label_first_s2[ev["label"]] = ev
+            events = sorted(label_first_s2.values(), key=lambda e: e["date"], reverse=True)[:8]
 
     elif ct == "Static" and dim == "ND":
         if (indicator_result.get("HHI") or 0) > 2500:
             events.append({"date": "latest", "label": "HHI 초과", "kind": "sell", "color": "#b42318"})
         if (indicator_result.get("top3_conc") or 0) > 0.6:
             events.append({"date": "latest", "label": "Top-3 집중", "kind": "warn", "color": "#b54708"})
+        if (indicator_result.get("cum_return") or 0) < -0.05:
+            events.append({"date": "latest", "label": "포트 수익 마이너스", "kind": "sell", "color": "#b42318"})
+
+    elif ct == "Activity" and dim == "1D":
+        win_rate = indicator_result.get("win_rate")
+        if win_rate is not None and win_rate < 0.4:
+            events.append({"date": "latest", "label": "승률 저조", "kind": "sell", "color": "#b42318"})
+        profit_factor = indicator_result.get("profit_factor")
+        if profit_factor is not None and profit_factor < 1.0:
+            events.append({"date": "latest", "label": "손익비 악화", "kind": "warn", "color": "#b54708"})
+        total_fee = indicator_result.get("total_fee")
+        if total_fee is not None and total_fee > 0:
+            events.append({"date": "latest", "label": "수수료 발생", "kind": "warn", "color": "#b54708"})
+
+    elif ct == "Activity" and dim == "2D":
+        switch_ratio = indicator_result.get("switch_ratio")
+        if switch_ratio is not None and switch_ratio > 0.3:
+            events.append({"date": "latest", "label": "과도한 스위칭", "kind": "warn", "color": "#b54708"})
+        net_profit = indicator_result.get("net_profit")
+        if net_profit is not None and net_profit < 0:
+            events.append({"date": "latest", "label": "순수익 손실", "kind": "sell", "color": "#b42318"})
+
+    elif ct == "Activity" and dim == "ND":
+        realized_pnl = indicator_result.get("realized_pnl")
+        if realized_pnl is not None and realized_pnl < 0:
+            events.append({"date": "latest", "label": "실현 손익 마이너스", "kind": "sell", "color": "#b42318"})
+        unrealized_pnl = indicator_result.get("unrealized_pnl")
+        if unrealized_pnl is not None and unrealized_pnl < 0:
+            events.append({"date": "latest", "label": "평가 손실 발생", "kind": "warn", "color": "#b54708"})
+        avg_hold = indicator_result.get("avg_hold")
+        if avg_hold is not None and avg_hold < 3:
+            events.append({"date": "latest", "label": "단타 매매 감지", "kind": "warn", "color": "#b54708"})
 
     return events
 
@@ -468,21 +527,53 @@ def _kpi_defs(
             ("최대 상관 쌍",  ir.get("max_corr_pair") or "—",  "종목 쌍"),
             ("누적 수익률",   fmt_pct(ir.get("cum_return")),    "동일비중"),
         ]
+    elif ct == "Static" and dim == "1D":
+        rows = [
+            ("누적 수익률",  fmt_pct(ir.get("cum_return")),    "기간 합성"),
+            ("최근 수익률",  fmt_pct(ir.get("recent_return")), "최근 분기"),
+            ("최고 분기",    ir.get("best_quarter")  or "—",   "최대 수익"),
+            ("최저 분기",    ir.get("worst_quarter") or "—",   "최대 손실"),
+            ("HHI",          fmt_num(ir.get("HHI"), 0),        "집중도"),
+        ]
     elif ct == "Static" and dim == "2D":
         rows = [
-            ("액티브 셰어", fmt_pct(ir.get("active_share")), "벤치 대비"),
-            ("추적 오차 (TE)", fmt_pct(ir.get("tracking_err")), "괴리 변동"),
-            ("정보 비율 (IR)", fmt_num(ir.get("info_ratio"), 2), "초과수익 품질"),
-            ("포트 누적 수익", fmt_pct(ir.get("cum_return")), "기간 합성"),
-            ("벤치 누적 수익", fmt_pct(ir.get("bm_return")), "목표 가중"),
+            ("포트 누적 수익",  fmt_pct(ir.get("cum_return")),     "기간 합성"),
+            ("벤치 누적 수익",  fmt_pct(ir.get("bm_return")),      "비교 종목"),
+            ("종목간 상관계수", fmt_num(ir.get("roll_corr"), 2),   "수익률 상관"),
+            ("추적 오차 (TE)", fmt_pct(ir.get("tracking_err")),    "수익 괴리"),
+            ("정보 비율 (IR)", fmt_num(ir.get("info_ratio"), 2),   "초과수익 품질"),
         ]
     elif ct == "Static" and dim == "ND":
         rows = [
-            ("HHI", fmt_num(ir.get("HHI"), 0), "집중도"),
-            ("유효 자산 수", fmt_num(ir.get("eff_n"), 1), "분산도"),
-            ("Top-3 집중도", fmt_pct(ir.get("top3_conc")), "상위 쏠림"),
-            ("누적 수익률", fmt_pct(ir.get("cum_return")), "Static 지표"),
-            ("최대 리스크 기여", ir.get("max_risk_asset") or "—", "자산명"),
+            ("HHI",             fmt_num(ir.get("HHI"), 0),          "집중도"),
+            ("유효 자산 수",     fmt_num(ir.get("eff_n"), 1),        "분산도"),
+            ("Top-3 집중도",     fmt_pct(ir.get("top3_conc")),       "상위 쏠림"),
+            ("누적 수익률",      fmt_pct(ir.get("cum_return")),      "분기 합성"),
+            ("최대 리스크 기여", ir.get("max_risk_asset") or "—",    "자산명"),
+        ]
+    elif ct == "Activity" and dim == "1D":
+        rows = [
+            ("승률",        fmt_pct(ir.get("win_rate")),         "매도 대비"),
+            ("수익 팩터",    fmt_num(ir.get("profit_factor"), 2), "손익비"),
+            ("총 수수료",    fmt_num(ir.get("total_fee"), 0),     "원"),
+            ("거래 횟수",    fmt_num(ir.get("trade_freq"), 0),    "건"),
+            ("VWAP 편차",   fmt_num(ir.get("vwap_dev"), 1),      "평균가 대비"),
+        ]
+    elif ct == "Activity" and dim == "2D":
+        rows = [
+            ("수수료 비용",   fmt_num(ir.get("fee_cost"), 0),       "원"),
+            ("스위칭 비율",   fmt_pct(ir.get("switch_ratio")),      "전환 빈도"),
+            ("스위칭 비용",   fmt_num(ir.get("switch_cost"), 0),    "원"),
+            ("교차 간격",     fmt_num(ir.get("cross_interval"), 1), "평균 거래일"),
+            ("순수익",        fmt_num(ir.get("net_profit"), 0),     "원"),
+        ]
+    elif ct == "Activity" and dim == "ND":
+        rows = [
+            ("연간 수수료",   fmt_num(ir.get("annual_fee"), 0),     "원"),
+            ("회전율",        fmt_num(ir.get("turnover_rate"), 2),  "배"),
+            ("평균 보유기간", fmt_num(ir.get("avg_hold"), 1),       "일"),
+            ("실현 손익",     fmt_num(ir.get("realized_pnl"), 0),   "원"),
+            ("미실현 손익",   fmt_num(ir.get("unrealized_pnl"), 0), "원"),
         ]
     else:
         rows = [("지표 1", "—", "n/a"), ("지표 2", "—", "n/a"), ("지표 3", "—", "n/a"), ("지표 4", "—", "n/a"), ("지표 5", "—", "n/a")]
