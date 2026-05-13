@@ -427,7 +427,7 @@ def _detect_events(
             events.append({"date": "latest", "label": "단타 매매 감지", "kind": "warn", "color": "#b54708"})
 
     return events
-    
+
 _GOAL_META = {
     "goal_trend": ("추세", "시계열 방향성·모멘텀"),
     "goal_comp": ("구성", "자산 간 비중·기여 비교"),
@@ -676,22 +676,22 @@ def _fig_candlestick(df: pd.DataFrame) -> go.Figure:
     lc = _find_col(df, "low", "l")
     cc = _find_col(df, "close", "c", "price", "last")
     vc = _find_col(df, "volume", "vol", "v")
-    
+
     # 일부 컬럼이 없으면 파생 생성 시도 (예: Price만 있고 OHLC가 없으면)
     if not (oc and hc and lc and cc) and cc:
         st.warning("일부 OHLC 컬럼이 없어 단일 가격 라인 차트로 대체합니다.")
         fig = go.Figure(go.Scatter(x=df[dc] if dc else df.index, y=df[cc], mode='lines', name="가격"))
         fig.update_layout(height=420, margin=dict(l=30, r=20, t=30, b=30))
         return fig
-    
+
     if not (dc and oc and hc and lc and cc):
         fig = go.Figure()
         fig.add_annotation(text=f"필수 OHLC 컬럼을 찾을 수 없습니다.<br>검색된 컬럼: {list(df.columns)}", 
                            xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
         return fig
-    
+
     w = df.sort_values(dc)
-    
+
     if vc:
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
                            vertical_spacing=0.05, 
@@ -1102,7 +1102,7 @@ def _fig_network(df: pd.DataFrame, indicator_result: dict, theme: str = "light")
     G = nx.Graph()
     for t in raw_tickers:
         G.add_node(t)
-    
+
     for i, t1 in enumerate(raw_tickers):
         for j, t2 in enumerate(raw_tickers):
             if j <= i: continue
@@ -1111,7 +1111,7 @@ def _fig_network(df: pd.DataFrame, indicator_result: dict, theme: str = "light")
             except: corr_val = 0.0
             if abs(corr_val) > threshold:
                 G.add_edge(t1, t2, weight=abs(corr_val))
-    
+
     # 3D 위치 계산
     pos_3d = nx.spring_layout(G, dim=3, seed=42)
     pos = {t: np.array(pos_3d.get(t, [0, 0, 0]), dtype=float) for t in raw_tickers}
@@ -1132,7 +1132,7 @@ def _fig_network(df: pd.DataFrame, indicator_result: dict, theme: str = "light")
 
             x0, y0, z0 = pos[t1]
             x1, y1, z1 = pos[t2]
-            
+
             fig.add_trace(go.Scatter3d(
                 x=[x0, x1], y=[y0, y1], z=[z0, z1],
                 mode="lines",
@@ -1148,12 +1148,12 @@ def _fig_network(df: pd.DataFrame, indicator_result: dict, theme: str = "light")
     node_x = [pos[t][0] for t in raw_tickers]
     node_y = [pos[t][1] for t in raw_tickers]
     node_z = [pos[t][2] for t in raw_tickers]
-    
+
     # 노드별 고유 색상 할당
     node_colors = [_DEFAULT_COLORS[i % len(_DEFAULT_COLORS)] for i in range(len(raw_tickers))]
     node_size = [30 + centrality.get(t, 0) * 40 for t in raw_tickers]
     node_labels = [display[t] for t in raw_tickers]
-    
+
     fig.add_trace(go.Scatter3d(
         x=node_x, y=node_y, z=node_z,
         mode="markers+text",
@@ -1169,7 +1169,7 @@ def _fig_network(df: pd.DataFrame, indicator_result: dict, theme: str = "light")
         hoverinfo="text",
         hovertext=[f"<b>{display[t]}</b><br>현재가: {latest_price.get(t,0):,.0f}" for t in raw_tickers]
     ))
-    
+
     fig.update_layout(
         scene=dict(
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, visible=False),
@@ -1235,7 +1235,7 @@ def _render_home_charts(mkt_data: list, theme: str = "light") -> None:
             is_sel = name in selected
             safe   = name.replace(" ", "_").replace("/", "_")
             price_str = (
-                f"{price:,.0f}" if name in ("KOSPI", "USD/KRW", "Nikkei 225") and price is not None
+                f"{price:,.0f}" if name in ("KOSPI", "USD/KRW", "Nikkei 225")
                 else f"{price:,.2f}" if price is not None
                 else "—"
             )
@@ -1439,7 +1439,7 @@ def build(
             '<p style="color:var(--sq-muted);font-size:0.88rem;margin-bottom:20px">Real-time global market indicators</p>',
             unsafe_allow_html=True,
         )
-        
+
         _render_home_charts(mkt_data, theme=theme)
 
                 # 3. 드래그 앤 드롭 업로드 영역 (CSS로 파일 업로더 자체에 점선 박스 씌우기)
@@ -1471,7 +1471,7 @@ def build(
             type=["csv"], 
             key="main_csv_upload"
         )
-        
+
         if uploaded_main:
             import pandas as pd
             try:
@@ -1483,7 +1483,7 @@ def build(
             except Exception as e:
                 st.error(f"Error reading file: {e}")
         return
-    
+
     if classify_result is None or df is None:
         mc, rc = st.columns([74, 26], gap="medium")
         with mc:
@@ -1683,7 +1683,7 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
 
             # 메인 차트 — class_type × dimension 분기
             ct = classify_result.get("class_type", "")
-            
+
             if ct == "TimeSeries":
                 dashboard_timeseries(df, classify_result, indicator_result, theme=theme)
             elif ct == "Static":
@@ -1697,6 +1697,12 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
 
             # 서브 차트 — 식별자 기반 라우팅
             subs = chart_result.get("sub_charts") or []
+            if ("excess_bar" in subs or "weight_drift_bar" in subs) and not _find_col(df, "target_weight"):
+                subs = [s for s in subs if s not in ["excess_bar", "weight_drift_bar"]]
+
+            # 필터링 2: 구현된 서브 차트만 남기기
+            supported_subs = ["rsi", "zscore", "rolling_corr", "network", "excess_bar", "weight_drift_bar", "scatter_pf", "switch_bar", "timeline"]
+            subs = [s for s in subs if s in supported_subs]
 
             def _render_sub(sub_id: str) -> None:
                 if sub_id == "rsi":
@@ -1718,7 +1724,7 @@ Result: <b style="color:var(--sq-text)">{classify_result["class_type"]}</b> / <b
                 elif sub_id == "timeline":
                     st.plotly_chart(_fig_activity_timeline(df, theme=theme), use_container_width=True)
                 else:
-                    st.caption(f"서브 차트 준비 중: {sub_id}")
+                    pass
 
             if len(subs) >= 2:
                 s1, s2 = st.columns(2)
@@ -1747,10 +1753,10 @@ def _render_news(query: str) -> str:
     """RSS 피드에서 뉴스를 가져와 HTML 리스트로 반환"""
     # 검색어의 공백이나 특수문자를 URL용 안전한 문자로 변환 (예: ' ' -> '%20')
     encoded_query = quote(query)
-    
+
     # 변환된 검색어를 URL에 삽입
     rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
-    
+
     feed = feedparser.parse(rss_url)
     
     news_html = ""
@@ -1767,7 +1773,7 @@ def _render_news(query: str) -> str:
 
 def _get_dynamic_query(classify_result: dict, indicator_result: dict, df: pd.DataFrame): 
     ct = classify_result.get("class_type")
-    
+
     if ct == "TimeSeries":
         close_col = _find_col(df, "close") 
         if close_col and df[close_col].mean() < 1000:
