@@ -3,6 +3,13 @@
 **FinRoute-AI**는 금융 데이터의 복잡한 조각들을 연결하여 명확한 투자 방향(Route)을 제시하는 지능형 대시보드입니다. Streamlit 프레임워크와 Anthropic Claude LLM을 결합하여, 사용자가 업로드한 CSV 데이터를 자동으로 분류하고 최적의 분석 지표와 시각화, 그리고 실전 투자 인사이트를 제공합니다.
 
 ---
+## 🏆 결과 (Results)
+
+| | |
+|---|---|
+| 🔗 **대회 링크** | [Daker AI 해커톤 리더보드](https://daker.ai/public/hackathons/hackathon-investment-data-skills-dashboard?section=leaderboard) |
+| 🥇 **데이콘 대회 순위** | 19위 / 321팀 참가 (상위 6%) |
+| 🌐 **서비스 데모** | [FinRoute-AI 바로가기][(https://your-streamlit-link)](https://finroute-ai2-m7jiqznqtvefxffryqctbc.streamlit.app/) |
 
 ## 🌟 주요 기능 (Core Features)
 
